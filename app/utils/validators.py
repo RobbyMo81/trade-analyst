@@ -494,6 +494,21 @@ class SchemaValidator:
         
         return batch_result
 
+# --- Additional URI / callback hygiene helpers (module level) ---
+import urllib.parse as _urllib_parse
+
+def is_valid_redirect_format(uri: str) -> bool:
+    """Basic structural validation for redirect URIs (https required)."""
+    try:
+        p = _urllib_parse.urlparse(uri)
+        return p.scheme == "https" and bool(p.netloc) and bool(p.path)
+    except Exception:
+        return False
+
+def exact_match(redirect: str, registered: List[str]) -> bool:  # noqa: D401
+    """Return True if redirect exactly equals one of the registered URIs."""
+    return redirect in set(registered)
+
 
 # Example schema definitions
 QUOTE_SCHEMA = {

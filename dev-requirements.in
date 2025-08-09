@@ -1,0 +1,31 @@
+#############################################
+# Development dependencies (unpinned)
+# Includes runtime requirements.
+# Use: pip-compile dev-requirements.in
+#############################################
+
+-r requirements.in
+
+# Testing & QA
+pytest
+pytest-asyncio
+pytest-cov
+pytest-mock
+black
+flake8
+mypy
+isort
+pre-commit
+
+# Test utilities
+responses
+freezegun
+factory-boy
+
+# Docs / Notebooks
+sphinx
+sphinx-rtd-theme
+myst-parser
+ipython
+jupyter
+notebook

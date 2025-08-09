@@ -1,0 +1,23 @@
+#############################################
+# Direct runtime dependencies (unpinned)
+# Use: pip-compile requirements.in
+# NOTE: Keep ONLY top-level runtime libs here.
+#############################################
+
+flask
+click
+aiohttp
+aiofiles
+pandas
+pyarrow
+python-dotenv
+toml
+authlib
+requests
+cryptography
+pytz
+python-dateutil
+structlog
+colorama
+jsonschema
+cerberus

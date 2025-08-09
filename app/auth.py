@@ -8,6 +8,7 @@ from urllib.parse import urlencode, parse_qs, urlparse
 import aiohttp
 import json
 from datetime import datetime, timedelta
+from pathlib import Path
 from .config import Config
 
 logger = logging.getLogger(__name__)
@@ -16,10 +17,15 @@ logger = logging.getLogger(__name__)
 class AuthManager:
     """Handles authentication flows and token management"""
     
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, env: str = "dev"):
         self.config = config
+        self.env = env
         self.tokens = {}
-        self.token_file = "tokens.json"
+        # Resolve per-env cache path: .cache/{env}/token_cache.json else fallback
+        base_cache = self.config.get('runtime.token_cache', 'token_cache.json')
+        cache_dir = Path('.cache') / env
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        self.token_file = str(cache_dir / Path(base_cache).name)
     
     async def login(self, provider: str = "default") -> bool:
         """
@@ -42,18 +48,26 @@ class AuthManager:
                 logger.info("Valid token found, authentication successful")
                 return True
             
-            # Start OAuth flow
+            # Simulated mode short-circuits full browser flow
+            simulate = self.config.get('auth.simulate', True)
+            if simulate:
+                logger.info("Simulated auth mode enabled; writing fake token cache")
+                self.tokens[provider] = {
+                    'access_token': 'SIMULATED',
+                    'refresh_token': 'SIMULATED_REFRESH',
+                    'expires_at': self._calculate_expiry(3600),
+                    'token_type': 'Bearer'
+                }
+                await self._save_tokens()
+                return True
+
+            # Real flow: open browser
             auth_url = await self._build_auth_url(provider)
             logger.info(f"Opening browser for authentication: {auth_url}")
-            
-            # Open browser for user authentication
             webbrowser.open(auth_url)
-            
-            # Wait for callback (this would be handled by the callback server)
             logger.info("Waiting for authentication callback...")
-            # TODO: Implement proper callback handling
-            
-            return True
+            # Placeholder: actual callback handling not yet implemented
+            return False
             
         except Exception as e:
             logger.error(f"Authentication failed: {e}")
@@ -154,38 +168,35 @@ class AuthManager:
             return False
     
     async def _build_auth_url(self, provider: str) -> str:
-        """Build OAuth authorization URL"""
-        provider_config = self.config.get_auth_config(provider)
-        
+        """Build OAuth authorization URL."""
+        provider_config = self.config.get_auth_config(provider) or {}
         params = {
-            'client_id': provider_config['client_id'],
+            'client_id': provider_config.get('client_id', ''),
             'response_type': 'code',
-            'redirect_uri': provider_config['redirect_uri'],
+            'redirect_uri': provider_config.get('redirect_uri', ''),
             'scope': provider_config.get('scope', ''),
             'state': self._generate_state()
         }
-        
-        return f"{provider_config['auth_url']}?{urlencode(params)}"
+        base = provider_config.get('auth_url') or provider_config.get('authorize_url') or 'https://example.com/oauth'
+        return f"{base}?{urlencode(params)}"
     
     async def _exchange_code_for_tokens(self, code: str, provider: str) -> Optional[Dict[str, Any]]:
         """Exchange authorization code for access tokens"""
-        provider_config = self.config.get_auth_config(provider)
-        
+        provider_config = self.config.get_auth_config(provider) or {}
         data = {
             'grant_type': 'authorization_code',
             'code': code,
-            'client_id': provider_config['client_id'],
-            'client_secret': provider_config['client_secret'],
-            'redirect_uri': provider_config['redirect_uri']
+            'client_id': provider_config.get('client_id', ''),
+            'client_secret': provider_config.get('client_secret', ''),
+            'redirect_uri': provider_config.get('redirect_uri', '')
         }
-        
+        token_url = provider_config.get('token_url') or 'https://example.com/token'
         async with aiohttp.ClientSession() as session:
-            async with session.post(provider_config['token_url'], data=data) as response:
+            async with session.post(token_url, data=data) as response:
                 if response.status == 200:
                     return await response.json()
-                else:
-                    logger.error(f"Token exchange failed: {response.status}")
-                    return None
+                logger.error(f"Token exchange failed: {response.status}")
+                return None
     
     async def _is_token_valid(self, provider: str) -> bool:
         """Check if stored token is valid and not expired"""

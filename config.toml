@@ -1,35 +1,27 @@
-# Patch the package to match the user's Schwab portal callback URLs and add multi-route callback support.
-import os, zipfile, json, textwrap
-
-root = "/mnt/data/schwab_exporter_TO1_rev2"
-app_dir = os.path.join(root, "app")
-os.makedirs(app_dir, exist_ok=True)
-
-# 1) Update config.toml with the three registered URIs from the screenshot.
-CONFIG = """# config.toml — TO1 (updated with your registered callback URLs)
+#########################
+# Application Configuration
+#########################
 
 [auth]
-# Confirm these in your Schwab portal docs and adjust if needed.
 authorize_url = "https://api.schwabapi.com/v1/oauth/authorize"
+auth_url = "https://api.schwabapi.com/v1/oauth/authorize"  # alias used by AuthManager
 token_url     = "https://api.schwabapi.com/v1/oauth/token"
+client_type   = "confidential"
 client_auth_method = "basic"
 scope = "quotes.read historical.read options.read timesales.read"
-
-# EXACT strings from your portal (verbatim):
+simulate = true
 registered_uris = [
-  "https://127.0.0.1:5000/oauth2/callback",
-  "https://127.0.0.1:3000/auth/redirect",
-  "https://127.0.0.1:8443/auth/redirect"
+    "https://127.0.0.1:5000/oauth2/callback",
+    "https://127.0.0.1:3000/auth/redirect",
+    "https://127.0.0.1:8443/auth/redirect"
 ]
 
 [env.dev]
-# Choose whichever of the above you want to use for local runs.
 redirect_uri = "https://127.0.0.1:5000/oauth2/callback"
 host = "127.0.0.1"
 port = 5000
 
 [env.prod]
-# Example: switch to your prod DNS when ready
 redirect_uri = "https://127.0.0.1:8443/auth/redirect"
 host = "0.0.0.0"
 port = 8443
@@ -37,7 +29,15 @@ port = 8443
 [runtime]
 storage_root = "./market_data"
 token_expiry_warning_minutes = 10
-token_cache = "token_cache.json"
+token_cache = "token_cache.json"  # fallback
+pkce_state_file = "pkce_state.json"
+
+[metrics]
+iv_window_days = 252
+
+[timesales]
+nbbo_window_ms = 1000
+price_epsilon  = 0.000001
 
 [retries]
 max_attempts = 5
@@ -57,244 +57,3 @@ backfill_days_intraday = 30
 backfill_days_daily = 365
 options_scope = "summary"
 tape_scope = "RTH_full"
-"""
-with open(os.path.join(root, "config.toml"), "w", encoding="utf-8") as f:
-    f.write(CONFIG)
-
-# 2) Multi-route callback handler to cover /oauth2/callback and /auth/redirect paths
-SERVER = """from __future__ import annotations
-from flask import Flask, request, Response
-import logging, json
-log = logging.getLogger("callback.server")
-
-def create_app() -> Flask:
-    app = Flask(__name__)
-
-    def _handle_callback() -> Response:
-        params = request.args.to_dict()
-        log.info("Received callback params: %s", params)
-        try:
-            with open("last_callback.json", "w", encoding="utf-8") as f:
-                json.dump(params, f, indent=2)
-        except Exception as e:
-            log.warning("Failed to write last_callback.json: %s", e)
-        return Response("<h3>Authorization Received</h3>", mimetype="text/html", status=200)
-
-    # Register multiple routes to match your portal entries
-    app.add_url_rule("/oauth2/callback", view_func=_handle_callback, methods=["GET"])
-    app.add_url_rule("/auth/redirect",  view_func=_handle_callback, methods=["GET"])
-
-    return app
-"""
-with open(os.path.join(app_dir, "server.py"), "w", encoding="utf-8") as f:
-    f.write(SERVER)
-
-# 3) Update healthcheck & callback_checker to pull redirect from args.env
-HEALTHCHECK = """from __future__ import annotations
-import logging
-from .config import load_config
-from .utils.validators import is_valid_redirect_format, exact_match
-log = logging.getLogger("healthcheck")
-
-def run_healthcheck(env: str = "dev") -> int:
-    cfg = load_config()
-    redirect = cfg["env"][env]["redirect_uri"]
-    registered = cfg["auth"]["registered_uris"]
-
-    ok = True
-    if not is_valid_redirect_format(redirect):
-        log.error("Redirect URI format invalid: %s", redirect)
-        ok = False
-    if not exact_match(redirect, registered):
-        log.error("Redirect URI is NOT an exact match to any registered URI.")
-        ok = False
-    else:
-        log.info("Redirect URI exact match ✓")
-
-    return 0 if ok else 2
-"""
-with open(os.path.join(app_dir, "healthcheck.py"), "w", encoding="utf-8") as f:
-    f.write(HEALTHCHECK)
-
-CALLBACK_CHECKER = """from __future__ import annotations
-import logging
-from .config import load_config
-from .utils.validators import is_valid_redirect_format, exact_match
-log = logging.getLogger("callback.checker")
-
-def preflight_check(env: str = "dev") -> bool:
-    cfg = load_config()
-    redirect = cfg["env"][env]["redirect_uri"]
-    registered = cfg["auth"]["registered_uris"]
-
-    if not is_valid_redirect_format(redirect):
-        log.error("Invalid redirect URI format: %s", redirect)
-        return False
-    if exact_match(redirect, registered):
-        log.info("Exact redirect URI match ✓")
-        return True
-    log.error("Redirect not registered: %s", redirect)
-    return False
-"""
-with open(os.path.join(app_dir, "callback_checker.py"), "w", encoding="utf-8") as f:
-    f.write(CALLBACK_CHECKER)
-
-# 4) Wire env through main CLI
-MAIN = """from __future__ import annotations
-import argparse, sys, logging
-from .config import load_config
-from .logging import configure_logging
-from .healthcheck import run_healthcheck
-from .systeminit import check_port_available, dry_ping_redirect
-from .auth import auth_login, auth_refresh, auth_status
-from .writers import demo_export_all
-
-def build_parser():
-    p = argparse.ArgumentParser(description="Schwab Exporter — TO1 CLI")
-    p.add_argument("--env", choices=["dev","prod"], default="dev")
-    sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("healthcheck")
-    sub.add_parser("auth-login")
-    sub.add_parser("auth-refresh")
-    sub.add_parser("auth-status")
-    sub.add_parser("export-dryrun")
-    s = sub.add_parser("system-init")
-    s.add_argument("--host"); s.add_argument("--port", type=int)
-    return p
-
-def main(argv=None) -> int:
-    argv = argv or sys.argv[1:]
-    args = build_parser().parse_args(argv)
-    cfg = load_config(); configure_logging(cfg["logging"]["level"])
-
-    if args.cmd == "healthcheck":
-        return run_healthcheck(args.env)
-
-    if args.cmd == "system-init":
-        env_block = cfg["env"][args.env]
-        ok = check_port_available(env_block.get("host","127.0.0.1"), env_block.get("port",5000))
-        if not ok:
-            logging.error("Port %s not available on %s", env_block.get("port",5000), env_block.get("host","127.0.0.1"))
-            return 2
-        logging.info("Port %s available on %s ✓", env_block.get("port",5000), env_block.get("host","127.0.0.1"))
-        dry_ping_redirect(env_block["redirect_uri"])
-        return 0
-
-    if args.cmd == "auth-login":  return auth_login(args.env)
-    if args.cmd == "auth-refresh": return auth_refresh(args.env)
-    if args.cmd == "auth-status":  return auth_status(args.env)
-    if args.cmd == "export-dryrun": return demo_export_all(cfg)
-    return 0
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-"""
-with open(os.path.join(app_dir, "main.py"), "w", encoding="utf-8") as f:
-    f.write(MAIN)
-
-# 5) Update auth.py to pass env to preflight
-AUTH_PATCH = """from __future__ import annotations
-import logging, os, webbrowser, json, time, requests
-from typing import Optional
-from urllib.parse import urlencode
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from .config import load_config
-from .server import create_app
-from .callback_checker import preflight_check
-from .logging import configure_logging
-log = logging.getLogger("auth")
-DEFAULT_TOKEN_CACHE="token_cache.json"
-
-class TokenError(Exception): ...
-class TokenExchangeError(TokenError): ...
-class TokenRefreshError(TokenError): ...
-
-def _b64(s:str)->str:
-    import base64 as b64; return b64.b64encode(s.encode()).decode()
-
-def _get_cache_path(cfg:dict)->str: return cfg["runtime"].get("token_cache", DEFAULT_TOKEN_CACHE)
-
-def build_authorize_url(client_id:str, redirect_uri:str, scope:str, authorize_url:str, state:str="state123")->str:
-    params={"response_type":"code","client_id":client_id,"redirect_uri":redirect_uri,"scope":scope,"state":state}
-    return f\"{authorize_url}?{urlencode(params)}\"
-
-def _client_auth(cfg:dict):
-    method=cfg["auth"].get("client_auth_method","basic"); cid=os.getenv("CLIENT_ID",""); csec=os.getenv("CLIENT_SECRET","")
-    headers,body={},{}
-    if method=="basic": headers["Authorization"]="Basic "+_b64(f\"{cid}:{csec}\")
-    else: body.update({"client_id":cid,"client_secret":csec})
-    return headers, body
-
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8), retry=retry_if_exception_type(TokenExchangeError))
-def exchange_code_for_tokens(cfg:dict, code:str, redirect_uri:str)->dict:
-    headers,body=_client_auth(cfg); token_url=cfg["auth"]["token_url"]
-    payload={"grant_type":"authorization_code","code":code,"redirect_uri":redirect_uri}; payload.update(body)
-    h={"Content-Type":"application/x-www-form-urlencoded"}; h.update(headers)
-    resp=requests.post(token_url, data=payload, headers=h, timeout=10)
-    if resp.status_code!=200: log.error("Token exchange failed: %s %s", resp.status_code, resp.text); raise TokenExchangeError()
-    data=resp.json(); data["acquired_at"]=int(time.time()); return data
-
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8), retry=retry_if_exception_type(TokenRefreshError))
-def refresh_tokens(cfg:dict, refresh_token:str)->dict:
-    headers,body=_client_auth(cfg); token_url=cfg["auth"]["token_url"]
-    payload={"grant_type":"refresh_token","refresh_token":refresh_token}; payload.update(body)
-    h={"Content-Type":"application/x-www-form-urlencoded"}; h.update(headers)
-    resp=requests.post(token_url, data=payload, headers=h, timeout=10)
-    if resp.status_code!=200: log.error("Token refresh failed: %s %s", resp.status_code, resp.text); raise TokenRefreshError()
-    data=resp.json(); data["acquired_at"]=int(time.time()); return data
-
-def save_tokens(cfg:dict, tokens:dict)->None:
-    path=_get_cache_path(cfg); 
-    with open(path,"w",encoding="utf-8") as f: json.dump(tokens,f,indent=2)
-    log.info("Saved tokens to %s", path)
-
-def load_tokens(cfg:dict)->Optional[dict]:
-    path=_get_cache_path(cfg)
-    if not os.path.exists(path): return None
-    with open(path,"r",encoding="utf-8") as f: return json.load(f)
-
-def token_seconds_remaining(tokens:dict):
-    exp=tokens.get("expires_in"); acq=tokens.get("acquired_at")
-    if not exp or not acq: return None
-    import time as _t; return max(0, acq+int(exp)-int(_t.time()))
-
-def auth_login(env:str="dev")->int:
-    cfg=load_config(); configure_logging(cfg["logging"]["level"])
-    if not preflight_check(env): log.error("Preflight redirect check failed; aborting."); return 2
-    cid=os.getenv("CLIENT_ID",""); csec=os.getenv("CLIENT_SECRET","")
-    if not cid or not csec: log.error("CLIENT_ID/CLIENT_SECRET not set."); return 2
-    env_block=cfg["env"][env]
-    url=build_authorize_url(cid, env_block["redirect_uri"], cfg["auth"]["scope"], cfg["auth"]["authorize_url"])
-    log.info("Opening browser..."); webbrowser.open(url, new=2)
-    app=create_app()
-    from threading import Thread
-    Thread(target=lambda: app.run(host=env_block.get("host","127.0.0.1"), port=env_block.get("port",5000), debug=False, use_reloader=False), daemon=True).start()
-    # Poll for code
-    code=None
-    import time as _t
-    for _ in range(300):
-        try:
-            with open("last_callback.json","r",encoding="utf-8") as f: params=json.load(f)
-            code=params.get("code")
-            if code: break
-        except FileNotFoundError: pass
-        _t.sleep(1)
-    if not code: log.error("No authorization code received."); return 3
-    tokens=exchange_code_for_tokens(cfg, code, env_block["redirect_uri"]); save_tokens(cfg, tokens); log.info("OAuth complete. ✓"); return 0
-
-def auth_refresh(env:str="dev")->int:
-    cfg=load_config(); configure_logging(cfg["logging"]["level"])
-    t=load_tokens(cfg)
-    if not t: log.error("No token cache; run auth-login first."); return 2
-    newt=refresh_tokens(cfg, t.get("refresh_token","")); save_tokens(cfg, newt); log.info("Token refreshed. ✓"); return 0
-
-def auth_status(env:str="dev")->int:
-    cfg=load_config(); configure_logging(cfg["logging"]["level"])
-    t=load_tokens(cfg)
-    if not t: log.error("Token: missing"); return 2
-    secs=token_seconds_remaining(t)
-    if secs is None: log.warning("Token: unknown expiry"); return 1
-    warn=int(cfg["runtime"].get("token_expiry_warning_minutes",10))*60
-    if secs<=0: log.error("Token expired."); return 2
-    if secs<warn: log.warning("Token expiring soon: %s sec", secs); return 1
-    log.info("Token OK. %s sec remaining.", secs); return 0p

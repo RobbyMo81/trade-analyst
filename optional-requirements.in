@@ -1,0 +1,21 @@
+#############################################
+# Optional / extra features (install as needed)
+# You can split these into extras in a pyproject later.
+#############################################
+
+scipy
+scikit-learn
+plotly
+matplotlib
+SQLAlchemy
+alembic
+psycopg2-binary
+redis
+celery
+kombu
+sentry-sdk
+prometheus-client
+flask-restx
+swagger-ui-bundle
+psutil
+memory-profiler

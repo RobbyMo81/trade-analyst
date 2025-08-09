@@ -3,12 +3,14 @@
 import logging
 import asyncio
 import aiohttp
+import json
 import psutil
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
 from .config import Config
+from .utils.validators import is_valid_redirect_format, exact_match
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +62,7 @@ class HealthChecker:
                 self.check_api_connectivity(),
                 self.check_authentication(),
                 self.check_database_connectivity(),
+                self.check_redirect_allowlist(),
                 self.check_external_dependencies()
             ]
             
@@ -379,7 +382,6 @@ class HealthChecker:
             
             # Try to read token file
             try:
-                import json
                 with open(token_file, 'r') as f:
                     tokens = json.load(f)
                 
@@ -501,6 +503,38 @@ class HealthChecker:
                 name="external_dependencies",
                 status="unhealthy",
                 message="Failed to check external dependencies",
+                error=str(e)
+            )
+
+    async def check_redirect_allowlist(self) -> HealthCheck:
+        """Validate that configured redirect is exactly registered."""
+        try:
+            redirect = self.config.get('env.dev.redirect_uri') or ''
+            registered = self.config.get('auth.registered_uris', []) or []
+            if not is_valid_redirect_format(redirect):
+                return HealthCheck(
+                    name="redirect_uri",
+                    status="unhealthy",
+                    message=f"Redirect format invalid: {redirect}",
+                )
+            if not exact_match(redirect, registered):
+                return HealthCheck(
+                    name="redirect_uri",
+                    status="unhealthy",
+                    message="Redirect URI not in exact allowlist",
+                    metadata={'redirect': redirect}
+                )
+            return HealthCheck(
+                name="redirect_uri",
+                status="healthy",
+                message="Redirect URI exact match",
+                metadata={'redirect': redirect}
+            )
+        except Exception as e:
+            return HealthCheck(
+                name="redirect_uri",
+                status="unhealthy",
+                message="Failed redirect validation",
                 error=str(e)
             )
 

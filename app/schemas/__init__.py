@@ -1,3 +1,4 @@
 """Schema definitions package"""
 
-__all__ = ['ohlc', 'options', 'timesales']
+__all__ = ['quotes', 'ohlc', 'options', 'timesales']
+

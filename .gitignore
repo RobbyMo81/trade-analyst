@@ -333,3 +333,41 @@ models/
 
 # Configuration overrides
 config.override.toml
+
+# --------------------------------------------------
+# Additional ignores (2025-08 update)
+# --------------------------------------------------
+# Linters / formatters
+.ruff_cache/
+
+# Benchmark outputs
+.benchmarks/
+
+# Coverage directory (if generated separately from htmlcov)
+coverage/
+
+# pip-tools log noise
+pip-tools.log
+
+# Expanded environment file variants
+.env.development
+.env.develop
+.env.test
+.env.stage
+.env.staging
+
+# Explicit token cache (already covered by .cache/, but documented for clarity)
+.cache/**/token_cache.json
+
+# Local task runner / orchestration metadata
+.task/ 
+
+# IDE workspace history (JetBrains, VSCode already covered; add generic)
+.history/
+
+# SQLite WAL & shm sidecars
+*.sqlite-wal
+*.sqlite-shm
+
+# macOS metadata (already include some, add extras just in case)
+.AppleDouble

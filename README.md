@@ -1,4 +1,10 @@
-# Trade Analyst Application
+# Schwab Data Exporter — TO1 (Credential & OAuth Foundation)
+
+This MVP implements **credential management**, **callback hygiene**, **runtime orchestration**, and **OAuth scaffolding**
+for the Charles Schwab Trader API — aligned with the approved Task Order #1 (TO1).
+
+> ⚠️ This project **does not** call Schwab endpoints yet. OAuth endpoints and scopes are parameterized in `config.toml`.
+> Fill them in once you create the app on the Schwab Developer Portal and register your **Redirect URI** verbatim.
 
 A comprehensive financial data analysis and processing application built with Python, Flask, and modern async patterns.
 

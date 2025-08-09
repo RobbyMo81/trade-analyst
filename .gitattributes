@@ -1,0 +1,81 @@
+###############################################################################
+# Git Attributes Configuration                                                 #
+# Purpose: Enforce consistent line endings, optimize diffs, and handle binary  #
+#          artifacts for the trade-analyst repository.                         #
+###############################################################################
+
+# -----------------------------------------------------------------------------
+# Core EOL Normalization
+# Force text files to use LF in repo; checkout converts per platform when safe
+# -----------------------------------------------------------------------------
+* text=auto eol=lf
+
+# Explicit overrides (defensive clarity)
+*.py      text eol=lf diff=python
+*.pyi     text eol=lf
+*.md      text eol=lf diff=markdown
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.toml    text eol=lf
+*.ini     text eol=lf
+*.cfg     text eol=lf
+*.json    text eol=lf
+*.csv     text eol=lf
+*.tsv     text eol=lf
+*.sh      text eol=lf
+*.ps1     text eol=lf
+*.bat     text eol=lf
+Dockerfile text eol=lf
+
+# Scripts with executable bit (helpful if repo consumed on Linux/macOS)
+*.sh      text eol=lf
+scripts/** text eol=lf
+
+# Binary / no diff artifacts
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.svg  text eol=lf           # treat SVG as text for diffs
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.tar  binary
+*.tar.gz binary
+*.tgz  binary
+*.7z   binary
+*.whl  binary
+*.pkl  binary
+*.joblib binary
+*.model binary
+
+# Data parquet or feather (if added later)
+*.parquet binary
+*.feather binary
+
+# Logs & generated outputs (if accidentally committed, keep normalized)
+*.log text eol=lf
+
+# Notebooks (if any added later) - treat as binary to avoid noisy diffs
+*.ipynb binary
+
+# Diff drivers (examples – activate in .gitconfig if needed)
+# Define custom driver for requirements lock diff for readability
+requirements.txt diff=python
+requirements.in  diff=python
+dev-requirements.in diff=python
+
+# Merge strategies (keep ours/theirs examples commented until needed)
+# config.toml merge=union
+# requirements.txt merge=union
+
+# Linguist overrides (GitHub language stats tuning)
+docs/** linguist-documentation
+*.md     linguist-documentation
+tests/** linguist-language=Python
+
+# End of file newline enforcement can be checked via editorconfig if desired
+
+###############################################################################
+# End of .gitattributes
+###############################################################################

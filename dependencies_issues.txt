@@ -1,0 +1,58 @@
+(.venv) PS C:\Users\RobMo\OneDrive\Documents\trade-analyst> pip install -r .\requirements.txt
+Ignoring pyobjc: markers 'sys_platform == "darwin"' don't match your environment
+Collecting click==8.1.7 (from -r .\requirements.txt (line 4))
+  Using cached click-8.1.7-py3-none-any.whl.metadata (3.0 kB)
+Collecting flask==3.0.0 (from -r .\requirements.txt (line 5))
+  Using cached flask-3.0.0-py3-none-any.whl.metadata (3.6 kB)
+Collecting asyncio==3.4.3 (from -r .\requirements.txt (line 6))
+  Using cached asyncio-3.4.3-py3-none-any.whl.metadata (1.7 kB)
+Collecting aiohttp==3.9.1 (from -r .\requirements.txt (line 7))
+  Using cached aiohttp-3.9.1.tar.gz (7.5 MB)
+  Installing build dependencies ... done
+  Getting requirements to build wheel ... done
+  Preparing metadata (pyproject.toml) ... done
+Collecting aiofiles==23.2.1 (from -r .\requirements.txt (line 8))
+  Using cached aiofiles-23.2.1-py3-none-any.whl.metadata (9.7 kB)
+Collecting pandas==2.1.4 (from -r .\requirements.txt (line 11))
+  Using cached pandas-2.1.4.tar.gz (4.3 MB)
+  Installing build dependencies ... done
+  Getting requirements to build wheel ... done
+  Preparing metadata (pyproject.toml) ... error
+  error: subprocess-exited-with-error
+
+  × Preparing metadata (pyproject.toml) did not run successfully.
+  │ exit code: 1
+  ╰─> [22 lines of output]
+      + meson setup C:\Users\RobMo\AppData\Local\Temp\pip-install-u58gbvf7\pandas_667ac320be654a508f40bdffcf171999 C:\Users\RobMo\AppData\Local\Temp\pip-install-u58gbvf7\pandas_667ac320be654a508f40bdffcf171999\.mesonpy-fp7akm6e\build -Dbuildtype=release -Db_ndebug=if-release -Db_vscrt=md --vsenv --native-file=C:\Users\RobMo\AppData\Local\Temp\pip-install-u58gbvf7\pandas_667ac320be654a508f40bdffcf171999\.mesonpy-fp7akm6e\build\meson-python-native-file.ini
+      The Meson build system
+      Version: 1.2.1
+      Source dir: C:\Users\RobMo\AppData\Local\Temp\pip-install-u58gbvf7\pandas_667ac320be654a508f40bdffcf171999
+      Build dir: C:\Users\RobMo\AppData\Local\Temp\pip-install-u58gbvf7\pandas_667ac320be654a508f40bdffcf171999\.mesonpy-fp7akm6e\build
+      Build type: native build
+      Project name: pandas
+      Project version: 2.1.4
+      C compiler for the host machine: cl (msvc 19.44.35214 "Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35214 for x86")
+      C linker for the host machine: link link 14.44.35214.0
+      C++ compiler for the host machine: cl (msvc 19.44.35214 "Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35214 for x86")
+      C++ linker for the host machine: link link 14.44.35214.0
+      Cython compiler for the host machine: cython (cython 0.29.37)
+      Host machine cpu family: x86
+      Host machine cpu: x86
+      Program python found: YES (C:\Users\RobMo\OneDrive\Documents\trade-analyst\.venv\Scripts\python.exe)
+      Need python for x86, but found x86_64
+      Run-time dependency python found: NO (tried sysconfig)
+
+      ..\..\pandas\_libs\tslibs\meson.build:23:7: ERROR: Python dependency not found
+
+      A full log can be found at C:\Users\RobMo\AppData\Local\Temp\pip-install-u58gbvf7\pandas_667ac320be654a508f40bdffcf171999\.mesonpy-fp7akm6e\build\meson-logs\meson-log.txt
+      [end of output]
+
+  note: This error originates from a subprocess, and is likely not a problem with pip.
+error: metadata-generation-failed
+
+× Encountered error while generating package metadata.
+╰─> See above for output.
+
+note: This is an issue with the package mentioned above, not pip.
+hint: See above for details.
+(.venv) PS C:\Users\RobMo\OneDrive\Documents\trade-analyst> 
