@@ -1,0 +1,182 @@
+# Configuration for Trade Analyst Application
+
+[app]
+name = "trade-analyst"
+version = "1.0.0"
+debug = false
+environment = "development"
+
+[logging]
+level = "INFO"
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+file_path = "logs/app.log"
+max_file_size = 10485760  # 10MB
+backup_count = 5
+enable_console = true
+enable_file = true
+
+[authentication]
+# OAuth configuration
+client_id = ""
+client_secret = ""
+redirect_uri = "http://localhost:8080/callback"
+scope = "read_quotes read_historical read_options read_timesales"
+token_file = "tokens/auth_tokens.json"
+refresh_threshold_seconds = 300  # Refresh token 5 minutes before expiry
+
+[data_sources]
+# Primary data source configuration
+default_source = "polygon"
+
+[data_sources.polygon]
+base_url = "https://api.polygon.io"
+api_key = ""
+rate_limit = 5  # requests per second
+timeout = 30
+retry_count = 3
+
+[data_sources.alpha_vantage]
+base_url = "https://www.alphavantage.co"
+api_key = ""
+rate_limit = 5
+timeout = 30
+retry_count = 3
+
+[data_sources.iex]
+base_url = "https://cloud.iexapis.com"
+api_key = ""
+rate_limit = 100
+timeout = 30
+retry_count = 3
+
+[storage]
+# Data storage configuration
+base_path = "data"
+format = "parquet"  # parquet, json, csv
+compression = "gzip"
+enable_hashing = true
+hash_algorithm = "sha256"
+
+[storage.quotes]
+path = "data/quotes"
+retention_days = 30
+partition_by = "date"
+
+[storage.historical]
+path = "data/historical"
+retention_days = 365
+partition_by = "symbol"
+
+[storage.options]
+path = "data/options"
+retention_days = 90
+partition_by = "expiration"
+
+[storage.timesales]
+path = "data/timesales"
+retention_days = 7
+partition_by = "date"
+
+[processing]
+# Data processing configuration
+batch_size = 1000
+parallel_workers = 4
+timeout_seconds = 300
+retry_attempts = 3
+enable_caching = true
+cache_ttl_seconds = 3600
+
+[validation]
+# Data validation configuration
+strict_mode = false
+allow_future_timestamps = false
+max_price = 1000000.0
+min_price = 0.01
+max_volume = 1000000000
+max_age_days = 30
+
+[validation.quotes]
+required_fields = ["symbol", "bid", "ask", "timestamp"]
+max_spread_percent = 50.0
+
+[validation.historical]
+required_fields = ["symbol", "open", "high", "low", "close", "volume", "timestamp"]
+validate_ohlc_consistency = true
+
+[validation.options]
+required_fields = ["symbol", "underlying_symbol", "option_type", "strike", "expiration", "bid", "ask", "last", "volume", "open_interest", "implied_volatility"]
+max_strike_ratio = 10.0
+validate_greeks = true
+
+[validation.timesales]
+required_fields = ["symbol", "timestamp", "price", "size", "exchange"]
+validate_trade_conditions = true
+
+[server]
+# Flask server configuration
+host = "localhost"
+port = 8080
+debug = false
+threaded = true
+
+[health_check]
+# Health monitoring configuration
+enabled = true
+check_interval_seconds = 60
+endpoint = "/health"
+timeout_seconds = 30
+
+[health_check.checks]
+database = true
+storage = true
+authentication = true
+data_sources = true
+memory_usage = true
+disk_space = true
+
+[health_check.thresholds]
+max_memory_percent = 80.0
+max_disk_percent = 90.0
+max_response_time_seconds = 5.0
+
+[alerting]
+# Alert configuration
+enabled = false
+email_recipients = []
+slack_webhook = ""
+alert_threshold = "ERROR"
+
+[features]
+# Feature flags
+enable_quotes = true
+enable_historical = true
+enable_options = true
+enable_timesales = true
+enable_real_time = false
+enable_streaming = false
+enable_analytics = true
+
+[development]
+# Development-specific settings
+auto_reload = true
+show_sql = false
+enable_profiling = false
+mock_data_sources = false
+
+[testing]
+# Test configuration
+mock_responses = true
+test_data_path = "tests/data"
+enable_fixtures = true
+
+[export]
+# Data export configuration
+default_format = "csv"
+include_metadata = true
+compress_exports = true
+
+[export.formats]
+csv = { enabled = true, separator = ",", quote_char = "\"" }
+json = { enabled = true, indent = 2 }
+parquet = { enabled = true, compression = "gzip" }
+excel = { enabled = false }
