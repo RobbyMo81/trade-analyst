@@ -18,7 +18,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pip-audit
       - name: Healthcheck
-        run: python -m app.main healthcheck || true
+        run: python -m app.main healthcheck
       - name: Tests
-        run: pytest -q || true
+        run: pytest -q
+      - name: Dependency Vulnerability Audit
+        run: pip-audit --strict || (echo "Dependency vulnerabilities found" && exit 1)
+  # Uncomment the block below (and add repo secrets) to exercise a real OAuth round-trip
+  # - name: Real OAuth Smoke
+  #   if: false  # flip to true when ready
+  #   env:
+  #     CLIENT_ID: ${{ secrets.SCHWAB_CLIENT_ID }}
+  #     CLIENT_SECRET: ${{ secrets.SCHWAB_CLIENT_SECRET }}
+  #     AUTH_SIMULATE: "false"
+  #   run: |
+  #     python -m app.main auth-smoke

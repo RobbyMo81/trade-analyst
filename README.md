@@ -19,6 +19,7 @@ A comprehensive financial data analysis and processing application built with Py
 - **RESTful API**: Flask-based web server with callback endpoints
 - **Async Processing**: High-performance async data processing
 - **Comprehensive Logging**: Structured logging with rotation and performance tracking
+- **Metrics Exporters Demo**: Synthetic demo exporters wire IV metrics, Put/Call ratios, and bid/ask trade classification for rapid integration (replace synthetic data with live provider fetches).
 
 ## Quick Start
 
@@ -30,6 +31,7 @@ A comprehensive financial data analysis and processing application built with Py
 ### Installation
 
 1. **Clone the repository**:
+   
    ```bash
    git clone <repository-url>
    cd trade-analyst
@@ -38,29 +40,34 @@ A comprehensive financial data analysis and processing application built with Py
 2. **Run the setup script**:
    
    **Windows**:
+   
    ```cmd
    start.bat
    ```
    
    **Linux/macOS**:
+   
    ```bash
    chmod +x start.sh
    ./start.sh
    ```
    
    Or use Python directly:
+   
    ```bash
    python start.py setup
    python start.py install
    ```
 
 3. **Configure the application**:
+   
    ```bash
    cp .env.example .env
    # Edit .env with your API keys and configuration
    ```
 
 4. **Start the application**:
+   
    ```bash
    python start.py server
    ```
@@ -93,8 +100,8 @@ FLASK_PORT=8080
 Edit `config.toml` to customize application behavior:
 
 ```toml
+ 
 [app]
-name = "trade-analyst"
 version = "1.0.0"
 environment = "development"
 
@@ -160,9 +167,31 @@ quote_data = await quotes.get_quote("AAPL")
 ohlc_data = await historical.get_historical("AAPL", "1D", "2024-01-01", "2024-01-31")
 ```
 
+### Metrics & Time & Sales Exporter Demo
+
+Synthetic demo exporters show how to hook metrics prior to wiring real Schwab endpoints:
+
+PowerShell:
+ 
+```powershell
+python -c "import json; from app.config import load_config; from app.exporters import build_options_stats, build_timesales_metrics; cfg=load_config(); print(json.dumps(build_options_stats(cfg),indent=2)); print(json.dumps(build_timesales_metrics(cfg),indent=2))"
+```
+
+Outputs include keys like `iv_rank`, `iv_percentile`, `put_call_ratio`, and `% at bid/ask/mid` metrics with a confidence summary.
+
+Replace synthetic data by supplying real DataFrames:
+ 
+```python
+stats = build_options_stats(cfg, iv_series=real_iv_series, chain=real_option_chain_df)
+ts_metrics = build_timesales_metrics(cfg, trades=real_trades_df, quotes=real_quotes_df)
+```text
+
+These can then be merged into your parquet writers / downstream analytics.
+
 ## Project Structure
 
-```
+ 
+```text
 trade-analyst/
 ├── app/
 │   ├── __init__.py
@@ -207,7 +236,8 @@ trade-analyst/
 ├── start.sh                # Unix startup script
 ├── Dockerfile              # Docker configuration
 └── README.md               # This file
-```
+ 
+```text
 
 ## Data Interfaces
 
@@ -266,6 +296,22 @@ OAuth 2.0 flow with automatic token refresh:
 1. **Initial Authentication**: Run `python start.py auth`
 2. **Automatic Refresh**: Tokens refreshed automatically before expiry
 3. **Secure Storage**: Tokens stored securely in `tokens/` directory
+
+### Token Encryption & Key Management
+
+Tokens are encrypted at rest using Fernet. The key is sourced from the `TOKEN_ENC_KEY` environment variable.
+
+Token handling policy:
+
+1. Provide a 32-byte urlsafe base64 key (Fernet.generate_key()).
+2. Rotate keys by:
+   - Decrypting existing cache with old key.
+   - Re-encrypting and writing with new key before redeploy.
+3. In dev, if `TOKEN_ENC_KEY` is absent an ephemeral key is generated (tokens will not persist across restarts).
+4. Never commit keys. Use secret stores (GitHub Actions secrets, environment manager, Key Vault, etc.).
+5. Plan rotation cadence (e.g., quarterly or on incident) and document rotation execution in change log.
+
+Rotation helper (conceptual): maintain old key available until next successful refresh cycle then remove.
 
 ## Monitoring & Health Checks
 
@@ -353,6 +399,7 @@ curl http://localhost:8080/health
 ### Logging
 
 Logs are written to:
+
 - **Console**: Real-time application output
 - **File**: `logs/app.log` with rotation
 - **Structured**: JSON format for easy parsing
@@ -360,6 +407,7 @@ Logs are written to:
 ### Performance
 
 For optimal performance:
+
 - Use async interfaces for concurrent operations
 - Enable caching in configuration
 - Monitor memory usage with health checks
@@ -380,6 +428,7 @@ For optimal performance:
 ## Support
 
 For support and questions:
+
 - **Documentation**: Check this README and inline comments
 - **Issues**: Use the GitHub issue tracker
 - **Health Checks**: Run `python start.py health` for diagnostics

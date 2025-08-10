@@ -358,6 +358,35 @@ pip-tools.log
 
 # Explicit token cache (already covered by .cache/, but documented for clarity)
 .cache/**/token_cache.json
+.cache/**/pkce_state.json
+
+# SBOM / security artifacts
+sbom.json
+sbom.xml
+cyclonedx-*.json
+cyclonedx-*.xml
+pip-audit.json
+pip-audit.csv
+
+# Load / performance test artifacts
+locust.log
+locustfile.stats.csv
+locustfile_failures.csv
+locustfile_distributions.csv
+loadtest-results/
+loadtest-reports/
+
+# Rolling IV history persistence (future feature)
+iv_history/
+iv_history*.json
+
+# Key rotation generated backups (never commit secrets)
+key-backups/
+rotated_keys/
+
+# Encryption key temp files (precaution)
+*.fernet.key
+*.enc.key
 
 # Local task runner / orchestration metadata
 .task/ 

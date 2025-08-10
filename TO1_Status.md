@@ -25,22 +25,25 @@ Note: `app/schemas/quotes.py` added in this revision (was referenced conceptuall
 - [x] Dependency rationalization & separation (runtime vs dev vs optional) with pip-tools pin generation
 - [x] Core metrics implemented (IV Rank & Percentile, Put/Call Volume & OI Ratios, Bid/Ask trade classification + % at bid/ask/mid, aggregated trade classification confidence helper)
 - [x] Per-env token cache structure (`.cache/{env}/token_cache.json`) + simulate OAuth mode (fake token write)
-- [x] CI workflow (`.github/workflows/ci.yml`) running healthcheck + test suite (per guidelines; temporary `|| true` retained)
+- [x] CI workflow (`.github/workflows/ci.yml`) running healthcheck + test suite (fail-fast; removed `|| true`; pip-audit added)
 - [x] Unit tests expanded: metrics, bid/ask classifier, OAuth smoke, callback hygiene
 - [x] Documentation alignment pending final README refresh (initial scope satisfied)
+- [x] Token cache encryption (Fernet) with ephemeral key fallback when `TOKEN_ENC_KEY` unset
+- [x] Provider abstraction skeleton + simulate ping + quotes simulate endpoint (normalized & validated)
+- [x] PKCE configuration flags added to `config.toml` (pkce=true, pkce_method="S256")
+- [x] Demo exporter wiring for metrics & bid/ask classification (`app/exporters/`) using synthetic data (ready for live data substitution)
 
 ---
 
 ## 🔧 Remaining Tasks (Revised)
 
-- [ ] External Schwab API integration (still stubbed; no live endpoint calls)
-- [ ] Real OAuth round-trip (simulate mode only now); add browser-less code exchange harness + refresh logic
-- [ ] Token security hardening (encryption at rest, secret management & rotation policy)
+- [ ] External Schwab live endpoint integration (currently simulate only for quotes)
+- [ ] Real OAuth end-to-end verification (state param validation + automated test)
+- [ ] Token security key management & rotation policy (encryption implemented, policy pending)
 - [ ] Performance benchmarks & load test scripts (Locust / profiling)
 - [ ] Enhanced error resolution workflow (stateful tracking, escalation hooks)
 - [ ] Additional test coverage: writers metadata assertions, callback lifecycle end-to-end, error handler decorators
-- [ ] Documentation refresh (metrics definitions, simulate mode, per-env token cache) & README update
-- [ ] Add vulnerability scanning + dependency audit (pip-audit / safety) to CI and remove `|| true`
+- [ ] Documentation refresh (metrics formulas, classification confidence) & README polishing (initial exporter section added)
 - [ ] Optional: rolling IV history persistence (beyond caller-supplied series) for future analytics
 - [ ] Optional: healthcheck JSON output flag for CI machine parsing
 
@@ -129,38 +132,47 @@ Core integration-test readiness features (metrics, bid/ask classifier, strict ca
 | Trade Classification & Confidence | Complete | 100% | NBBO + tick fallback + confidence helper | - |
 | Callback Hygiene | Complete | 100% | Strict allowlist + negative tests | - |
 | Dependency Management | Complete | 100% | Layered pip-tools; optional segregated | - |
-| OAuth & AuthN | Partial | 40% | Simulate mode only; real code & refresh missing | P1 |
-| External Schwab API Integration | Not Started | 0% | No abstraction / live call yet | P1 |
-| Token Security (Encryption/Keyring) | Not Started | 0% | Plain-text token cache | P1 |
+| OAuth & AuthN | Partial | 60% | Simulate + refresh + callback scaffold; real exchange validation pending (PKCE flags present) | P1 |
+| External Schwab API Integration | Partial | 30% | Skeleton + ping + quotes simulate endpoint; no live data | P1 |
+| Token Security (Encryption/Keyring) | Partial | 50% | Encryption added; persistent key & rotation policy TBD | P1 |
 | Error Resolution Workflow | Partial | 50% | Registry & severity exist; workflow UX pending | P2 |
-| Writers & Data Output | Partial | 85% | Functionality done; metadata tests missing | P2 |
+| Writers & Data Output | Partial | 90% | Functionality + exporter demo; metadata tests missing | P2 |
 | Logging & Observability | Partial | 70% | Structured base; enrichment / correlation TBD | P2 |
-| CI & Quality Gates | Partial | 70% | Workflow present; permissive (\|\| true) & no scans | P1 |
-| Security & Dependency Scanning | Not Started | 0% | pip-audit/safety not integrated | P1 |
+| CI & Quality Gates | Partial | 85% | Fail-fast enabled; vulnerability scan added; coverage gating pending | P1 |
+| Security & Dependency Scanning | Partial | 50% | pip-audit integrated; severity policy & SBOM pending | P1 |
 | Performance & Load Testing | Not Started | 0% | No benchmarks / Locust scripts | P3 |
-| Documentation & Knowledge Base | Partial | 60% | Status file updated; README & metric docs pending | P2 |
+| Documentation & Knowledge Base | Partial | 65% | Status file updated; README exporter section added; metric formula docs pending | P2 |
 | Healthcheck & Ops | Partial | 85% | Redirect validation done; JSON output flag pending | P3 |
 | Optional Enhancements (Rolling IV, etc.) | Inception | 10% | Only conceptual | P3 |
 
-Overall Progress (unweighted mean across areas): 61%. Weighted (P1 areas emphasized at 1.5x): ~54% (lower due to critical gaps).
+Overall Progress (unweighted mean across areas): 66%. Weighted (P1 areas emphasized at 1.5x): ~60% (critical gaps shrinking).
 
 ### Phase 2 Scope Definition (Gate to "Integration Ready")
 
 P1 (Must Complete to Reach Integration Ready):
 
 1. Real OAuth Authorization Code & Refresh Flow
+
 	- Deliverables: auth exchange function, refresh token persistence, expiry handling, new smoke test (marker: auth_real_flow).
 	- Acceptance: End-to-end token retrieval succeeds against live or sandbox; refresh path unit/integration test passes; simulate no longer default in CI.
+
 2. Schwab API Adapter & Initial Endpoint Integration
+
 	- Deliverables: abstraction module (e.g. app/providers/schwab.py), interface contract, mockable client, at least 1 live (or stub) call with response normalization.
 	- Acceptance: Mock tests green; healthcheck includes adapter readiness; failure modes logged with structured context.
+
 3. CI Hardening & Security Scanning
+
 	- Deliverables: Remove '|| true'; add pip-audit (or safety); fail build on high severity vulns or test failures; cache dependencies.
 	- Acceptance: CI fails on introduced test regression or vulnerability; badge (optional) updated.
+
 4. Token Security
+
 	- Deliverables: Encryption-at-rest (env key or keyring fallback) for token cache; secret rotation procedure documented.
 	- Acceptance: Plain-text tokens absent on disk; decrypt path validated in tests (without exposing secrets).
+
 5. Expanded Test Coverage (Critical Paths)
+
 	- Deliverables: Writers metadata assertions; error handler decorator tests; end-to-end callback lifecycle; real OAuth flow tests.
 	- Acceptance: Coverage for new critical modules >= target (set provisional 75%+) and all new tests stable.
 
@@ -195,7 +207,7 @@ P3 (Deferred / Optional):
 | Lack of real OAuth flow | Blocks integration tests | Prioritize P1 item 1 immediately |
 | No security scanning | Vulnerabilities may ship | Add pip-audit in CI (P1 item 3) |
 | Token plaintext cache | Credential leakage risk | Implement encryption (P1 item 4) |
-| CI permissive mode | Hidden regressions | Remove '|| true' after P1 coverage |
+| CI permissive mode | Hidden regressions | Remove permissive fallback after P1 coverage |
 
 ---
 

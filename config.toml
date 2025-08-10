@@ -6,10 +6,14 @@
 authorize_url = "https://api.schwabapi.com/v1/oauth/authorize"
 auth_url = "https://api.schwabapi.com/v1/oauth/authorize"  # alias used by AuthManager
 token_url     = "https://api.schwabapi.com/v1/oauth/token"
+base_url      = "https://api.schwabapi.com/v1"  # base API URL for real calls (quotes, etc.)
 client_type   = "confidential"
 client_auth_method = "basic"
 scope = "quotes.read historical.read options.read timesales.read"
 simulate = true
+# PKCE settings (added per Implementation_Guidelines_HPF #2)
+pkce = true
+pkce_method = "S256"
 registered_uris = [
     "https://127.0.0.1:5000/oauth2/callback",
     "https://127.0.0.1:3000/auth/redirect",

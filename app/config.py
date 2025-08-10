@@ -418,6 +418,14 @@ def reload_config():
         _config_instance.reload()
 
 
+def load_config() -> dict:
+    """Convenience helper returning the merged config as a plain dict.
+
+    Added to mirror helper style used in exporter subpackages and interactive examples.
+    """
+    return get_config().to_dict()
+
+
 # Example usage
 if __name__ == "__main__":
     # Test configuration

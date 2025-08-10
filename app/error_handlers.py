@@ -1,9 +1,10 @@
 """Error handlers and exception management"""
 
 import logging
+import asyncio
 import traceback
 import functools
-from typing import Any, Callable, Dict, Optional, Type, Union
+from typing import Any, Callable, Dict, Optional, Type, Union, List
 from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
@@ -114,9 +115,9 @@ class ErrorHandler:
     
     def handle_error(self, 
                     error: Exception, 
-                    context: Dict[str, Any] = None,
-                    severity: ErrorSeverity = None,
-                    error_id: str = None) -> str:
+                    context: Optional[Dict[str, Any]] = None,
+                    severity: Optional[ErrorSeverity] = None,
+                    error_id: Optional[str] = None) -> str:
         """
         Handle an error and return error ID
         
@@ -213,8 +214,8 @@ class ErrorHandler:
 error_handler = ErrorHandler()
 
 
-def handle_exceptions(severity: ErrorSeverity = None, 
-                     context: Dict[str, Any] = None,
+def handle_exceptions(severity: Optional[ErrorSeverity] = None, 
+                     context: Optional[Dict[str, Any]] = None,
                      reraise: bool = False):
     """
     Decorator to handle exceptions in functions
@@ -303,7 +304,7 @@ def handle_auth_errors(func: Callable) -> Callable:
 
 class APIError(Exception):
     """Custom exception for API-related errors"""
-    def __init__(self, message: str, status_code: int = None, provider: str = None):
+    def __init__(self, message: str, status_code: Optional[int] = None, provider: Optional[str] = None):
         super().__init__(message)
         self.status_code = status_code
         self.provider = provider
@@ -311,14 +312,14 @@ class APIError(Exception):
 
 class AuthenticationError(Exception):
     """Custom exception for authentication errors"""
-    def __init__(self, message: str, provider: str = None):
+    def __init__(self, message: str, provider: Optional[str] = None):
         super().__init__(message)
         self.provider = provider
 
 
 class DataValidationError(Exception):
     """Custom exception for data validation errors"""
-    def __init__(self, message: str, field: str = None, value: Any = None):
+    def __init__(self, message: str, field: Optional[str] = None, value: Any = None):
         super().__init__(message)
         self.field = field
         self.value = value
@@ -326,7 +327,7 @@ class DataValidationError(Exception):
 
 class RateLimitError(Exception):
     """Custom exception for rate limit errors"""
-    def __init__(self, message: str, retry_after: int = None, provider: str = None):
+    def __init__(self, message: str, retry_after: Optional[int] = None, provider: Optional[str] = None):
         super().__init__(message)
         self.retry_after = retry_after
         self.provider = provider
