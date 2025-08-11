@@ -1,0 +1,25 @@
+---
+name: Docs Lint
+"on":
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+jobs:
+  markdown:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mdformat
+        run: |
+          pip install mdformat mdformat-gfm
+      - name: mdformat check
+        run: |
+          mdformat --check . || (echo "Markdown format differences detected" && exit 1)
+      - name: Markdownlint (Docker)
+        run: |
+          docker run --rm -v "$PWD:/workspace" davidanson/markdownlint-cli2:latest '**/*.md' '!**/dist/**'

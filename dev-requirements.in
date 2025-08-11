@@ -16,6 +16,8 @@ flake8
 mypy
 isort
 pre-commit
+mdformat
+mdformat-gfm
 
 # Test utilities
 responses

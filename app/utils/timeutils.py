@@ -444,6 +444,25 @@ def get_market_calendar(year: int, holidays: Optional[List[date]] = None) -> Lis
     
     return get_business_days(start_date, end_date, holidays)
 
+# --- Lightweight UTC helpers (referenced by provider hardening patch) ---
+def now_utc() -> datetime:
+    """Return timezone-aware current UTC datetime."""
+    return datetime.now(timezone.utc)
+
+def to_rfc3339(dt: datetime, milliseconds: bool = False) -> str:
+    """Serialize datetime to RFC3339 with trailing Z.
+
+    Args:
+        dt: datetime (aware or naive; naive assumed UTC)
+        milliseconds: include millisecond precision
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    dt = dt.astimezone(timezone.utc)
+    if milliseconds:
+        return dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+    return dt.strftime('%Y-%m-%dT%H:%M:%S') + 'Z'
+
 
 class TimeRangeIterator:
     """Iterator for time ranges"""

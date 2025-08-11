@@ -1,5 +1,12 @@
 # Schwab Data Exporter — TO1 (Credential & OAuth Foundation)
 
+![CI](https://github.com/RobbyMo81/trade-analyst/actions/workflows/ci.yml/badge.svg)
+![Docs Lint (standalone)](https://github.com/RobbyMo81/trade-analyst/actions/workflows/docs_lint.yml/badge.svg)
+![Workflow Lint](https://github.com/RobbyMo81/trade-analyst/actions/workflows/workflow-lint.yml/badge.svg)
+[![codecov](https://codecov.io/gh/RobbyMo81/trade-analyst/branch/main/graph/badge.svg)](https://codecov.io/gh/RobbyMo81/trade-analyst)
+
+> Badges show workflow status. Coverage percentage ratchets upward over time (see "Coverage Ratchet Policy").
+
 This MVP implements **credential management**, **callback hygiene**, **runtime orchestration**, and **OAuth scaffolding**
 for the Charles Schwab Trader API — aligned with the approved Task Order #1 (TO1).
 
@@ -19,7 +26,9 @@ A comprehensive financial data analysis and processing application built with Py
 - **RESTful API**: Flask-based web server with callback endpoints
 - **Async Processing**: High-performance async data processing
 - **Comprehensive Logging**: Structured logging with rotation and performance tracking
-- **Metrics Exporters Demo**: Synthetic demo exporters wire IV metrics, Put/Call ratios, and bid/ask trade classification for rapid integration (replace synthetic data with live provider fetches).
+- **Metrics Exporters Demo**: Synthetic demo exporters wire IV metrics,
+  Put/Call ratios, and bid/ask trade classification for rapid integration
+  (replace synthetic data with live provider fetches).
 
 ## Quick Start
 
@@ -177,7 +186,8 @@ PowerShell:
 python -c "import json; from app.config import load_config; from app.exporters import build_options_stats, build_timesales_metrics; cfg=load_config(); print(json.dumps(build_options_stats(cfg),indent=2)); print(json.dumps(build_timesales_metrics(cfg),indent=2))"
 ```
 
-Outputs include keys like `iv_rank`, `iv_percentile`, `put_call_ratio`, and `% at bid/ask/mid` metrics with a confidence summary.
+Outputs include keys like `iv_rank`, `iv_percentile`, `put_call_ratio`, and
+`% at bid/ask/mid` metrics with a confidence summary.
 
 Replace synthetic data by supplying real DataFrames:
  
@@ -420,6 +430,42 @@ For optimal performance:
 3. Make changes with tests
 4. Run quality checks
 5. Submit a pull request
+
+### Coverage Ratchet Policy
+
+We enforce a minimum coverage threshold (currently 40%) via `--cov-fail-under` in CI. The target will be raised in
+5% (or smaller near the top) increments once BOTH conditions hold for 3 consecutive main-branch runs:
+
+1. Actual coverage exceeds the current threshold by at least 3 percentage points.
+2. No new high-severity ("errors" category) validation or security regressions are introduced.
+
+Procedure to raise:
+
+1. Author a PR increasing `COVERAGE_FAIL_UNDER` (job-level env in `.github/workflows/ci.yml`).
+2. Include added/expanded tests justifying the increase.
+3. Update this README section if moving above 70%, documenting notable newly covered areas.
+
+If a temporary drop is unavoidable (e.g., large feature with scaffolding),
+include a plan to restore coverage within 2 subsequent PRs.
+
+### Security & Dependency Scanning
+
+CI runs `pip-audit` (JSON artifact uploaded) and generates a CycloneDX SBOM (`sbom.json`). Address actionable CVEs promptly:
+
+1. Patch minor/patch versions where semver-safe.
+2. If upstream fix pending, pin a safe prior version or apply a temporary ignore (document rationale in PR body).
+
+### Documentation Quality
+
+Markdown formatting (`mdformat`) and style (`markdownlint`) run in parallel with tests. To fix failures locally:
+
+```bash
+pip install mdformat mdformat-gfm
+mdformat .
+docker run --rm -v "$PWD:/workspace" davidanson/markdownlint-cli2:latest '**/*.md' '!**/dist/**'
+```
+
+Automated formatting is intentionally conservative—semantic edits remain manual.
 
 ## License
 

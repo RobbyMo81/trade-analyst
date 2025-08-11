@@ -89,10 +89,12 @@ def validate_ohlc_data(data: List[Dict[str, Any]]) -> Dict[str, Any]:
                 
                 # OHLC logic validation
                 if high_price < max(open_price, close_price):
-                    validation_result['warnings'].append(f"Record {i}: High price lower than open/close")
-                
+                    validation_result['errors'].append(f"Record {i}: High price lower than open/close")
+                    validation_result['is_valid'] = False
+
                 if low_price > min(open_price, close_price):
-                    validation_result['warnings'].append(f"Record {i}: Low price higher than open/close")
+                    validation_result['errors'].append(f"Record {i}: Low price higher than open/close")
+                    validation_result['is_valid'] = False
                 
                 if any(price <= 0 for price in [open_price, high_price, low_price, close_price]):
                     validation_result['errors'].append(f"Record {i}: Prices must be positive")
@@ -107,7 +109,8 @@ def validate_ohlc_data(data: List[Dict[str, Any]]) -> Dict[str, Any]:
             try:
                 volume = int(record['volume'])
                 if volume < 0:
-                    validation_result['warnings'].append(f"Record {i}: Negative volume")
+                    validation_result['errors'].append(f"Record {i}: Negative volume")
+                    validation_result['is_valid'] = False
             except (ValueError, TypeError):
                 validation_result['errors'].append(f"Record {i}: Invalid volume data type")
                 validation_result['is_valid'] = False

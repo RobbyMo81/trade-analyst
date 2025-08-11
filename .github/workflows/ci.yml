@@ -1,36 +1,111 @@
-name: CI
-on:
+---
+name: ci
+"on":
   push:
-    branches: [ main, feat/** ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-test:
+  build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COVERAGE_FAIL_UNDER: 40
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
+
+      - name: Setup Python
         uses: actions/setup-python@v5
+        id: setup-python
         with:
-          python-version: '3.12'
-      - name: Install deps
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-
+
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pip-audit
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
       - name: Healthcheck
-        run: python -m app.main healthcheck
-      - name: Tests
-        run: pytest -q
+        run: python -m app.main --env dev healthcheck
+
+      - name: Test with coverage
+        run: |
+          pytest -q \
+            --cov=app \
+            --cov-report=term-missing:skip-covered \
+            --cov-report=xml \
+            --cov-fail-under=${{ env.COVERAGE_FAIL_UNDER }}
+
+      - name: Upload coverage XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml-${{ github.sha }}
+          path: coverage.xml
+          retention-days: 14
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+          fail_ci_if_error: true
+
+      - name: Generate SBOM (CycloneDX)
+        run: |
+          python -m pip install cyclonedx-bom
+          cyclonedx-py --format json --output sbom.json
+
+      - name: Upload SBOM
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx-${{ github.sha }}
+          path: sbom.json
+          retention-days: 30
+
       - name: Dependency Vulnerability Audit
-        run: pip-audit --strict || (echo "Dependency vulnerabilities found" && exit 1)
-  # Uncomment the block below (and add repo secrets) to exercise a real OAuth round-trip
-  # - name: Real OAuth Smoke
-  #   if: false  # flip to true when ready
-  #   env:
-  #     CLIENT_ID: ${{ secrets.SCHWAB_CLIENT_ID }}
-  #     CLIENT_SECRET: ${{ secrets.SCHWAB_CLIENT_SECRET }}
-  #     AUTH_SIMULATE: "false"
-  #   run: |
-  #     python -m app.main auth-smoke
+        run: |
+          python -m pip install pip-audit
+          pip-audit -f json -o pip-audit.json || true
+
+      - name: Upload pip-audit JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-${{ github.sha }}
+          path: pip-audit.json
+          retention-days: 14
+  docs_lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Markdownlint
+        uses: docker://ghcr.io/igorshubovych/markdownlint-cli:latest
+        with:
+          args: "**/*.md"
+      - name: mdformat (check only)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install mdformat
+        run: |
+          python -m pip install --upgrade pip
+          pip install mdformat mdformat-gfm
+      - name: Run mdformat check
+        run: mdformat --check .

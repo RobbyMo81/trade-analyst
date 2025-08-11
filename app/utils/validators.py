@@ -61,10 +61,12 @@ def validate_symbol(symbol: str) -> bool:
     """
     if not isinstance(symbol, str):
         return False
-    
+    # Reject empty and lowercase originals (tests expect 'lower' invalid)
+    if symbol == '' or symbol != symbol.upper():
+        return False
     # Basic symbol pattern: 1-6 uppercase letters, optionally followed by dot and suffix
     pattern = r'^[A-Z]{1,6}(\.[A-Z]{1,3})?$'
-    return bool(re.match(pattern, symbol.upper()))
+    return bool(re.match(pattern, symbol))
 
 
 def validate_price(price: Union[int, float], min_price: float = 0.0, max_price: float = 1000000.0) -> bool:
@@ -81,7 +83,10 @@ def validate_price(price: Union[int, float], min_price: float = 0.0, max_price: 
     """
     try:
         price_val = float(price)
-        return min_price <= price_val <= max_price
+        # Enforce strictly > 0 (tests treat 0 as invalid) unless caller raises min_price
+        if price_val <= 0:
+            return False
+        return min_price < price_val <= max_price
     except (ValueError, TypeError):
         return False
 
