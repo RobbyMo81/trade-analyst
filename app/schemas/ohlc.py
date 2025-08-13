@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 import pandas as pd
 from dataclasses import dataclass
+from pandas._typing import DtypeArg
 
 
 @dataclass
@@ -37,6 +38,14 @@ OHLC_SCHEMA = {
     'adj_close': 'float64',
     'dividend': 'float64',
     'split_coefficient': 'float64'
+}
+
+# Map schema labels to pandas extension/typed dtypes accepted by type stubs
+DTYPE_MAP: Dict[str, DtypeArg] = {
+    'string': pd.StringDtype(),
+    'float64': pd.Float64Dtype(),
+    'int64': pd.Int64Dtype(),
+    # timestamp handled via to_datetime(utc=True) above; avoid astype here
 }
 
 # Required columns for OHLC data
@@ -194,16 +203,26 @@ def create_ohlc_dataframe(data: List[Dict[str, Any]]) -> pd.DataFrame:
     
     # Convert timestamp column
     if 'timestamp' in df.columns:
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        # Use timezone-aware UTC timestamps for consistency
+        df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
     
     # Apply schema
     for column, dtype in OHLC_SCHEMA.items():
         if column in df.columns:
             try:
+                # Prefer pandas extension dtypes where applicable to satisfy type stubs
                 if dtype == 'string':
-                    df[column] = df[column].astype('string')
+                    df[column] = df[column].astype(pd.StringDtype())
+                elif column == 'timestamp':
+                    # Already converted via to_datetime with utc=True
+                    continue
                 else:
-                    df[column] = df[column].astype(dtype)
+                    mapped: Optional[DtypeArg] = DTYPE_MAP.get(dtype)
+                    if mapped is not None:
+                        df[column] = df[column].astype(mapped)
+                    else:
+                        # Fallback: leave as-is if not in map (shouldn't happen with current schema)
+                        continue
             except (ValueError, TypeError):
                 # Handle conversion errors gracefully
                 pass

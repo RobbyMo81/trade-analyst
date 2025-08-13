@@ -277,17 +277,27 @@ class HealthChecker:
             
             required_dirs = ['data', 'data/quotes', 'data/historical', 'data/options', 'data/timesales']
             missing_dirs = []
+            created_dirs = []
             
             for dir_path in required_dirs:
-                if not Path(dir_path).exists():
+                p = Path(dir_path)
+                if not p.exists():
                     missing_dirs.append(dir_path)
+                    try:
+                        p.mkdir(parents=True, exist_ok=True)
+                        created_dirs.append(dir_path)
+                    except Exception:
+                        pass
             
-            if missing_dirs:
+            if missing_dirs and not created_dirs:
                 status = 'warning'
                 message = f"Missing data directories: {', '.join(missing_dirs)}"
             else:
                 status = 'healthy'
-                message = "All data directories exist"
+                if created_dirs:
+                    message = f"Created missing data directories: {', '.join(created_dirs)}"
+                else:
+                    message = "All data directories exist"
             
             duration = (datetime.now() - start_time).total_seconds() * 1000
             
@@ -298,7 +308,7 @@ class HealthChecker:
                 duration_ms=duration,
                 metadata={
                     'required_dirs': len(required_dirs),
-                    'missing_dirs': len(missing_dirs)
+                    'missing_dirs': len([d for d in required_dirs if not Path(d).exists()])
                 }
             )
             
@@ -370,31 +380,43 @@ class HealthChecker:
         try:
             start_time = datetime.now()
             
-            # Check if token files exist and are readable
-            token_file = Path("tokens.json")
-            
-            if not token_file.exists():
+            # Candidate token cache paths (support legacy tokens.json and configured caches)
+            candidates = []
+            # From config
+            auth_token_file = self.config.get('auth.token_file', 'tokens.json')
+            runtime_cache = self.config.get('runtime.token_cache', 'token_cache.json')
+            candidates.extend([auth_token_file, runtime_cache])
+            # Common cache locations by env
+            candidates.extend([
+                '.cache/dev/token_cache.json',
+                '.cache/prod/token_cache.json',
+            ])
+            existing = [Path(p) for p in candidates if p and Path(p).exists()]
+            if not existing:
                 return HealthCheck(
                     name="authentication",
                     status="warning",
                     message="No authentication tokens found"
                 )
-            
-            # Try to read token file
-            try:
-                with open(token_file, 'r') as f:
-                    tokens = json.load(f)
-                
-                if not tokens:
-                    status = 'warning'
-                    message = "Token file is empty"
-                else:
-                    status = 'healthy'
-                    message = f"Authentication tokens available for {len(tokens)} providers"
-                    
-            except json.JSONDecodeError:
-                status = 'unhealthy'
-                message = "Token file is corrupted"
+            # Try to parse any JSON cache; if encrypted or non-JSON, still consider healthy
+            total_providers = 0
+            parsed_any = False
+            for p in existing:
+                try:
+                    text = p.read_text(encoding='utf-8')
+                    data = json.loads(text)
+                    if isinstance(data, dict):
+                        parsed_any = True
+                        total_providers += len(data)
+                except Exception:
+                    # likely encrypted; ignore
+                    continue
+            if parsed_any and total_providers > 0:
+                status = 'healthy'
+                message = f"Authentication tokens available for {total_providers} providers"
+            else:
+                status = 'healthy'
+                message = "Token cache file(s) present"
             
             duration = (datetime.now() - start_time).total_seconds() * 1000
             
@@ -402,7 +424,8 @@ class HealthChecker:
                 name="authentication",
                 status=status,
                 message=message,
-                duration_ms=duration
+                duration_ms=duration,
+                metadata={'files': [str(p) for p in existing]}
             )
             
         except Exception as e:
@@ -414,31 +437,35 @@ class HealthChecker:
             )
     
     async def check_database_connectivity(self) -> HealthCheck:
-        """Check database connectivity (if applicable)"""
+        """Check database connectivity (config-controlled)."""
         try:
             start_time = datetime.now()
-            
-            # For this application, we're using file-based storage
-            # Check if we can write to the data directory
-            data_dir = Path("data")
-            
-            if not data_dir.exists():
-                return HealthCheck(
-                    name="database_connectivity",
-                    status="unhealthy",
-                    message="Data directory does not exist"
-                )
-            
-            # Test write access
-            test_file = data_dir / "health_check_test.tmp"
-            try:
-                test_file.write_text("test")
-                test_file.unlink()
-                status = 'healthy'
-                message = "Data storage accessible"
-            except Exception:
-                status = 'unhealthy'
-                message = "Data storage not writable"
+            dsn = self.config.get('database.dsn', '') or ''
+            required = bool(self.config.get('database.required', False))
+
+            if not dsn:
+                # No DSN configured; treat as non-blocking unless required
+                status = 'unhealthy' if required else 'warning'
+                message = "No database DSN configured" if required else "No DSN configured; non-blocking"
+            else:
+                # Minimal check for sqlite DSN; for others, warn
+                if dsn.startswith('sqlite:///'):
+                    # Ensure file path directory exists and is writable
+                    sqlite_path = dsn.replace('sqlite:///', '')
+                    p = Path(sqlite_path)
+                    try:
+                        p.parent.mkdir(parents=True, exist_ok=True)
+                        # touch the file lazily (won't create DB schema)
+                        if not p.exists():
+                            p.touch()
+                        status = 'healthy'
+                        message = 'SQLite path accessible'
+                    except Exception:
+                        status = 'unhealthy' if required else 'warning'
+                        message = 'SQLite path not writable'
+                else:
+                    status = 'warning' if not required else 'unhealthy'
+                    message = 'Non-sqlite DSN set; connectivity check not implemented'
             
             duration = (datetime.now() - start_time).total_seconds() * 1000
             

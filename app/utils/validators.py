@@ -503,10 +503,22 @@ class SchemaValidator:
 import urllib.parse as _urllib_parse
 
 def is_valid_redirect_format(uri: str) -> bool:
-    """Basic structural validation for redirect URIs (https required)."""
+    """Basic structural validation for redirect URIs.
+
+    Rules:
+    - https is always accepted when netloc and path exist
+    - http is accepted ONLY for localhost/127.0.0.1 to support local dev flows
+    """
     try:
         p = _urllib_parse.urlparse(uri)
-        return p.scheme == "https" and bool(p.netloc) and bool(p.path)
+        if not (bool(p.netloc) and bool(p.path)):
+            return False
+        if p.scheme == "https":
+            return True
+        if p.scheme == "http":
+            host = p.hostname or ""
+            return host in {"localhost", "127.0.0.1"}
+        return False
     except Exception:
         return False
 

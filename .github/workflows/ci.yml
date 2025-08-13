@@ -42,8 +42,22 @@ jobs:
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
       - name: Healthcheck
-        run: python -m app.main --env dev healthcheck
+        run: |
+          python -m app.main healthcheck
 
+      - name: Version sanity
+        run: |
+          python - << 'PY'
+          import sys, numpy, pandas
+          print('py', sys.version)
+          print('numpy', numpy.__version__)
+          print('pandas', pandas.__version__)
+          try:
+              import pyarrow as pa
+              print('pyarrow', pa.__version__)
+          except Exception as e:
+              print('pyarrow not importable:', e)
+          PY
       - name: Test with coverage
         run: |
           pytest -q \
@@ -98,7 +112,7 @@ jobs:
       - name: Markdownlint
         uses: docker://ghcr.io/igorshubovych/markdownlint-cli:latest
         with:
-          args: "**/*.md"
+          args: '**/*.md'
       - name: mdformat (check only)
         uses: actions/setup-python@v5
         with:

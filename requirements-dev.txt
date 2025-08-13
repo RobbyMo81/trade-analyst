@@ -286,7 +286,7 @@ notebook-shim==0.2.4
     # via
     #   jupyterlab
     #   notebook
-numpy==2.3.2
+numpy>=1.26.0,<2
     # via pandas
 overrides==7.7.0
     # via jupyter-server

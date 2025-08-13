@@ -3,9 +3,12 @@
 import os
 import json
 import toml
+import logging
 from typing import Any, Dict, Optional, Union
 from pathlib import Path
 from dataclasses import dataclass
+from dotenv import load_dotenv
+from .utils.validators import is_valid_redirect_format, exact_match
 
 
 @dataclass
@@ -33,6 +36,32 @@ class Config:
     """Configuration manager for the application"""
     
     def __init__(self, config_file: Optional[str] = None):
+        # Load .env first so environment overrides are available
+        try:
+            load_dotenv()
+        except Exception:
+            # python-dotenv optional; safe to continue if not installed
+            pass
+        # Map credential aliases into canonical env vars if present
+        try:
+            existing_cid = os.getenv("CLIENT_ID")
+            existing_sec = os.getenv("CLIENT_SECRET")
+            alias_cid = os.getenv("OAUTH_CLIENT_ID") or os.getenv("SCHWAB_CLIENT_ID")
+            alias_sec = os.getenv("OAUTH_CLIENT_SECRET") or os.getenv("SCHWAB_CLIENT_SECRET")
+
+            def _is_placeholder(val: Optional[str]) -> bool:
+                if not val:
+                    return True
+                v = val.strip().lower()
+                return v.startswith("your_") or v.startswith("changeme") or v in {"", "placeholder"}
+
+            if alias_cid and (existing_cid is None or _is_placeholder(existing_cid)):
+                os.environ["CLIENT_ID"] = alias_cid
+            if alias_sec and (existing_sec is None or _is_placeholder(existing_sec)):
+                os.environ["CLIENT_SECRET"] = alias_sec
+        except Exception:
+            # Env mapping is best-effort; continue if sandboxed
+            pass
         self.config_data = {}
         self.config_file = config_file
         
@@ -47,9 +76,11 @@ class Config:
                 if Path(config_path).exists():
                     self._load_config_file(config_path)
                     break
-        
+
         # Override with environment variables
         self._load_environment_variables()
+        # Callback hygiene warnings after config/env merge
+        self._redirect_hygiene_warnings()
     
     def _load_default_config(self):
         """Load default configuration values"""
@@ -149,12 +180,63 @@ class Config:
             'DB_NAME': ('database', 'database'),
             'DB_USER': ('database', 'username'),
             'DB_PASSWORD': ('database', 'password'),
+
+            # Project-specific overrides
+            'CLIENT_ID': ('auth', 'client_id'),
+            'CLIENT_SECRET': ('auth', 'client_secret'),
+            'AUTH_SIMULATE': ('auth', 'simulate'),
+            'TOKEN_CACHE_PATH': ('runtime', 'token_cache'),
+            'STORAGE_ROOT': ('runtime', 'storage_root'),
+            'LOG_LEVEL': ('logging', 'level'),
+            'IV_WINDOW_DAYS': ('metrics', 'iv_window_days'),
+            'NBBO_WINDOW_MS': ('timesales', 'nbbo_window_ms'),
+            'PRICE_EPSILON': ('timesales', 'price_epsilon'),
+            # Redirect (dev env)
+            # Note: OAUTH_REDIRECT_URI targets env.<name>.redirect_uri; defaults to 'dev'.
         }
         
         for env_var, config_path in env_mappings.items():
             value = os.getenv(env_var)
             if value is not None:
                 self._set_nested_value(self.config_data, config_path, self._convert_env_value(value))
+
+        # Special handling: support setting both auth_url and authorize_url from a single var
+        auth_url = os.getenv('OAUTH_AUTH_URL')
+        if auth_url:
+            self._set_nested_value(self.config_data, ('auth', 'auth_url'), auth_url)
+            self._set_nested_value(self.config_data, ('auth', 'authorize_url'), auth_url)
+        token_url = os.getenv('OAUTH_TOKEN_URL')
+        if token_url:
+            self._set_nested_value(self.config_data, ('auth', 'token_url'), token_url)
+
+        # Handle redirect targeting for a specific environment block
+        redirect = os.getenv('OAUTH_REDIRECT_URI')
+        if redirect:
+            target_env = os.getenv('OAUTH_REDIRECT_ENV', 'dev')
+            self._set_nested_value(self.config_data, ('env', target_env, 'redirect_uri'), redirect)
+
+    def _redirect_hygiene_warnings(self):
+        """Log warnings for invalid or unregistered redirect URIs across env blocks."""
+        try:
+            registered = self.get('auth.registered_uris', []) or []
+            envs = self.get('env', {}) or {}
+            if not isinstance(envs, dict):
+                return
+            for env_name, block in envs.items():
+                try:
+                    r = (block or {}).get('redirect_uri')
+                    if not r:
+                        continue
+                    if not is_valid_redirect_format(r):
+                        logging.warning("[config] Redirect URI for env '%s' has invalid format: %s", env_name, r)
+                    elif not exact_match(r, registered):
+                        logging.warning("[config] Redirect URI for env '%s' not found in registered allowlist.", env_name)
+                except Exception:
+                    # Be resilient to odd structures
+                    continue
+        except Exception:
+            # Hygiene is best-effort; don't block startup
+            pass
     
     def _deep_merge(self, base_dict: Dict, update_dict: Dict):
         """Deep merge two dictionaries"""

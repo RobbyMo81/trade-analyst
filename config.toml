@@ -15,13 +15,11 @@ simulate = true
 pkce = true
 pkce_method = "S256"
 registered_uris = [
-    "https://127.0.0.1:5000/oauth2/callback",
-    "https://127.0.0.1:3000/auth/redirect",
-    "https://127.0.0.1:8443/auth/redirect"
+    "http://127.0.0.1:5000/callback"
 ]
 
 [env.dev]
-redirect_uri = "https://127.0.0.1:5000/oauth2/callback"
+redirect_uri = "http://127.0.0.1:5000/callback"
 host = "127.0.0.1"
 port = 5000
 
@@ -61,3 +59,7 @@ backfill_days_intraday = 30
 backfill_days_daily = 365
 options_scope = "summary"
 tape_scope = "RTH_full"
+
+[database]
+dsn = "sqlite:///./.cache/dev/state.db"
+required = false
