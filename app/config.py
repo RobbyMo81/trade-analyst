@@ -126,6 +126,13 @@ class Config:
                 'max_retry_attempts': 3
             },
             'api_providers': {},
+            'providers': {
+                # Provider-specific settings
+                'schwab': {
+                    # Base URL for market data APIs; can be overridden via env SCHWAB_MARKETDATA_BASE
+                    'marketdata_base': ''
+                }
+            },
             'features': {
                 'enable_quotes': True,
                 'enable_historical': True,
@@ -193,6 +200,8 @@ class Config:
             'PRICE_EPSILON': ('timesales', 'price_epsilon'),
             # Redirect (dev env)
             # Note: OAUTH_REDIRECT_URI targets env.<name>.redirect_uri; defaults to 'dev'.
+            # Provider overrides
+            'SCHWAB_MARKETDATA_BASE': ('providers', 'schwab', 'marketdata_base'),
         }
         
         for env_var, config_path in env_mappings.items():
@@ -214,6 +223,30 @@ class Config:
         if redirect:
             target_env = os.getenv('OAUTH_REDIRECT_ENV', 'dev')
             self._set_nested_value(self.config_data, ('env', target_env, 'redirect_uri'), redirect)
+
+    def get_schwab_market_base(self) -> str:
+        """Return the Schwab market data base URL.
+
+        Resolution order:
+        1) Env SCHWAB_MARKETDATA_BASE
+        2) config providers.schwab.marketdata_base
+        3) auth.base_url (legacy)
+
+        Returns a string without trailing slash.
+        """
+        try:
+            env_val = os.getenv('SCHWAB_MARKETDATA_BASE')
+            if env_val and isinstance(env_val, str) and env_val.strip():
+                return env_val.strip().rstrip('/')
+            cfg_val = self.get('providers.schwab.marketdata_base')
+            if cfg_val and isinstance(cfg_val, str) and cfg_val.strip():
+                return cfg_val.strip().rstrip('/')
+            legacy = self.get('auth.base_url', '') or ''
+            return (legacy if isinstance(legacy, str) else '').strip().rstrip('/')
+        except Exception:
+            # Be resilient; fall back to auth.base_url or empty string
+            legacy = self.get('auth.base_url', '') or ''
+            return (legacy if isinstance(legacy, str) else '').strip().rstrip('/')
 
     def _redirect_hygiene_warnings(self):
         """Log warnings for invalid or unregistered redirect URIs across env blocks."""

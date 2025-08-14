@@ -1,0 +1,77 @@
+{
+  "timestamp_utc": "2025-08-14T03:24:27.225266Z",
+  "target": "stress_suite.scripts.targets:schwab_quotes",
+  "concurrency": 50,
+  "iterations": 2000,
+  "ok": 2000,
+  "errors": 0,
+  "error_rate_pct": 0.0,
+  "throughput_ops_sec": 333.75184145482956,
+  "latency_ms": {
+    "p50": 2.696099996683188,
+    "p95": 4.19589999364689,
+    "max": 68.93599999602884
+  },
+  "sample": [
+    {
+      "records": [],
+      "normalized": [],
+      "validation": {
+        "is_valid": false,
+        "reason": "No access token for provider=default. Run auth login or supply mock_access_token fixture."
+      },
+      "meta": {
+        "mode": "live_missing_token"
+      },
+      "ts": "2025-08-14T03:24:22.494Z"
+    },
+    {
+      "records": [],
+      "normalized": [],
+      "validation": {
+        "is_valid": false,
+        "reason": "No access token for provider=default. Run auth login or supply mock_access_token fixture."
+      },
+      "meta": {
+        "mode": "live_missing_token"
+      },
+      "ts": "2025-08-14T03:24:23.104Z"
+    },
+    {
+      "records": [],
+      "normalized": [],
+      "validation": {
+        "is_valid": false,
+        "reason": "No access token for provider=default. Run auth login or supply mock_access_token fixture."
+      },
+      "meta": {
+        "mode": "live_missing_token"
+      },
+      "ts": "2025-08-14T03:24:24.727Z"
+    },
+    {
+      "records": [],
+      "normalized": [],
+      "validation": {
+        "is_valid": false,
+        "reason": "No access token for provider=default. Run auth login or supply mock_access_token fixture."
+      },
+      "meta": {
+        "mode": "live_missing_token"
+      },
+      "ts": "2025-08-14T03:24:26.130Z"
+    },
+    {
+      "records": [],
+      "normalized": [],
+      "validation": {
+        "is_valid": false,
+        "reason": "No access token for provider=default. Run auth login or supply mock_access_token fixture."
+      },
+      "meta": {
+        "mode": "live_missing_token"
+      },
+      "ts": "2025-08-14T03:24:26.580Z"
+    }
+  ]
+}

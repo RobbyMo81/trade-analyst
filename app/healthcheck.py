@@ -64,7 +64,8 @@ class HealthChecker:
                 self.check_authentication(),
                 self.check_database_connectivity(),
                 self.check_redirect_allowlist(),
-                self.check_external_dependencies()
+                self.check_external_dependencies(),
+                self.check_schwab_market_server()
             ]
             
             results = await asyncio.gather(*check_tasks, return_exceptions=True)
@@ -580,6 +581,66 @@ class HealthChecker:
                 name="redirect_uri",
                 status="unhealthy",
                 message="Failed redirect validation",
+                error=str(e)
+            )
+
+    async def check_schwab_market_server(self) -> HealthCheck:
+        """Probe the Schwab market data base for basic reachability.
+
+        Policy:
+        - In simulate mode, downgrade failures to warning to avoid blocking local dev.
+        - Consider 2xx/3xx/404 as reachable; fail on DNS/TLS/network or 5xx.
+        """
+        try:
+            start_time = datetime.now()
+            simulate = bool(self.config.get('auth.simulate', False))
+            base = ''
+            try:
+                base = self.config.get_schwab_market_base()
+            except Exception:
+                base = ''
+            if not base:
+                return HealthCheck(
+                    name="schwab_market_server",
+                    status="warning",
+                    message="No marketdata base configured; skipping",
+                )
+            # Use a benign path like /ping or root
+            probe_urls = [f"{base}", f"{base}/ping"]
+            ok = False
+            code = None
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as session:
+                for url in probe_urls:
+                    try:
+                        async with session.get(url) as resp:
+                            code = resp.status
+                            if 200 <= code < 400 or code == 404:
+                                ok = True
+                                break
+                    except Exception:
+                        continue
+            duration = (datetime.now() - start_time).total_seconds() * 1000
+            if ok:
+                return HealthCheck(
+                    name="schwab_market_server",
+                    status="healthy",
+                    message="Market server reachable",
+                    duration_ms=duration,
+                    metadata={"base": base, "status": code}
+                )
+            else:
+                return HealthCheck(
+                    name="schwab_market_server",
+                    status=("warning" if simulate else "unhealthy"),
+                    message=("Unreachable (downgraded in simulate)" if simulate else "Unreachable"),
+                    duration_ms=duration,
+                    metadata={"base": base, "status": code}
+                )
+        except Exception as e:
+            return HealthCheck(
+                name="schwab_market_server",
+                status="unhealthy",
+                message="Failed market server probe",
                 error=str(e)
             )
 

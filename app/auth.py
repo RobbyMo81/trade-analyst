@@ -137,7 +137,7 @@ class AuthManager:
             if provider_config.get('redirect_uri'):
                 data['redirect_uri'] = provider_config.get('redirect_uri')
 
-            new_tokens = await self._request_token(token_url, data)
+            new_tokens = await self._request_token(token_url, data, provider)
             if not new_tokens or 'access_token' not in new_tokens:
                 logger.error("Refresh failed: no access_token in response")
                 return False
@@ -269,13 +269,30 @@ class AuthManager:
         if stored and stored.get('code_verifier'):
             data['code_verifier'] = stored['code_verifier']
         token_url = provider_config.get('token_url') or 'https://example.com/token'
-        return await self._request_token(token_url, data)
+        return await self._request_token(token_url, data, provider)
 
-    async def _request_token(self, token_url: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Internal helper to POST to token endpoint (facilitates monkeypatching in tests)."""
+    async def _request_token(self, token_url: str, data: Dict[str, Any], provider: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Internal helper to POST to token endpoint (facilitates monkeypatching in tests).
+
+        If config specifies client_auth_method=='basic', include HTTP Basic Authorization header
+        with base64(client_id:client_secret). Many providers require this for confidential apps.
+        """
         try:
+            headers: Dict[str, str] = {"Content-Type": "application/x-www-form-urlencoded"}
+            if provider:
+                try:
+                    pcfg = self.config.get_auth_config(provider) or {}
+                    if str(pcfg.get('client_auth_method', '')).lower() == 'basic':
+                        cid = pcfg.get('client_id', '')
+                        csec = pcfg.get('client_secret', '')
+                        if cid and csec:
+                            import base64
+                            b = base64.b64encode(f"{cid}:{csec}".encode('utf-8')).decode('ascii')
+                            headers['Authorization'] = f"Basic {b}"
+                except Exception:
+                    pass
             async with aiohttp.ClientSession() as session:
-                async with session.post(token_url, data=data) as response:
+                async with session.post(token_url, data=data, headers=headers) as response:
                     if response.status == 200:
                         return await response.json()
                     text = await response.text()
@@ -293,6 +310,11 @@ class AuthManager:
         if not redirect_uri:
             return False
         parsed = urlparse(redirect_uri)
+        # Only attempt a built-in local callback for plain HTTP localhost redirects.
+        # We do not implement TLS here; if the redirect scheme is https, skip and fall back to manual input.
+        if (parsed.scheme or '').lower() != 'http':
+            logger.debug("Skipping local callback server for non-HTTP redirect: %s", redirect_uri)
+            return False
         if parsed.hostname not in ("127.0.0.1", "localhost"):
             return False
         port = parsed.port or 5000

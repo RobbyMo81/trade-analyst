@@ -15,7 +15,8 @@ simulate = true
 pkce = true
 pkce_method = "S256"
 registered_uris = [
-    "http://127.0.0.1:5000/callback"
+    "http://127.0.0.1:5000/callback",
+    "https://127.0.0.1:8443/auth/redirect"
 ]
 
 [env.dev]
@@ -27,6 +28,11 @@ port = 5000
 redirect_uri = "https://127.0.0.1:8443/auth/redirect"
 host = "0.0.0.0"
 port = 8443
+
+[providers.schwab]
+# Base URL for the Schwab market data API (overrides auth.base_url for data calls)
+# Can be overridden via environment variable SCHWAB_MARKETDATA_BASE
+marketdata_base = "https://api.schwabapi.com/v1/marketdata"
 
 [runtime]
 storage_root = "./market_data"

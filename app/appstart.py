@@ -30,12 +30,23 @@ class AppOrchestrator:
         """
         try:
             logger.info("Starting application orchestration")
+            # Log chosen provider base to aid diagnostics
+            try:
+                md_base = self.config.get_schwab_market_base()
+                if md_base:
+                    logger.info("Schwab Market Data base: %s", md_base)
+                else:
+                    logger.info("Schwab Market Data base: <not configured>")
+            except Exception:
+                # non-fatal
+                pass
             
             # Step 1: Health check
             logger.info("Running health checks...")
             health_status = await self.health_checker.check_all()
             if not health_status.is_healthy:
-                logger.error(f"Health check failed: {health_status.errors}")
+                unhealthy_msgs = [c.message for c in health_status.checks if c.status == 'unhealthy']
+                logger.error("Health check failed: %s", "; ".join(unhealthy_msgs) or "see details")
                 return False
             
             # Step 2: System initialization
