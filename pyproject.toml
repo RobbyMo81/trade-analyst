@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trade-analyst"
+version = "0.1.0"
+description = "Trade Analyst CLI and app"
+readme = "README.md"
+requires-python = ">=3.12"
+# Dependencies intentionally minimal; install optional CLI deps (typer) as needed
+dependencies = []
+
+[project.scripts]
+trade-analyst = "cli_start_bundle_v2.start:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*", "cli_start_bundle_v2*"]

@@ -11,12 +11,34 @@ import os
 import base64
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from cryptography.fernet import Fernet, InvalidToken
 from .config import Config
 
 logger = logging.getLogger(__name__)
+
+# ---- Time helpers ---------------------------------------------------------
+def _now_utc() -> datetime:
+    """Return current UTC time as an aware datetime."""
+    return datetime.now(timezone.utc)
+
+def _parse_iso8601_utc(value) -> datetime | None:
+    """Parse ISO-8601 timestamp into an aware UTC datetime.
+
+    Accepts forms like '2025-08-15T23:18:07.119313Z' or with explicit +00:00 offset.
+    Returns None on failure.
+    """
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    try:
+        txt = str(value).replace('Z', '+00:00')
+        dt = datetime.fromisoformat(txt)
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
 
 
 class AuthManager:
@@ -127,17 +149,21 @@ class AuthManager:
                 return False
 
             token_url = provider_config.get('token_url') or 'https://example.com/token'
+            # Build token request body. If provider uses HTTP Basic for client auth,
+            # do NOT include client_id/client_secret in the form body.
+            use_basic = str(provider_config.get('client_auth_method', '')).lower() == 'basic'
             data = {
                 'grant_type': 'refresh_token',
                 'refresh_token': refresh_token,
-                'client_id': provider_config.get('client_id', ''),
-                'client_secret': provider_config.get('client_secret', ''),
             }
+            if not use_basic:
+                data['client_id'] = provider_config.get('client_id', '')
+                data['client_secret'] = provider_config.get('client_secret', '')
             # Optional: redirect_uri sometimes required by providers
             if provider_config.get('redirect_uri'):
                 data['redirect_uri'] = provider_config.get('redirect_uri')
 
-            new_tokens = await self._request_token(token_url, data, provider)
+            new_tokens = await self._call_request_token(token_url, data, provider)
             if not new_tokens or 'access_token' not in new_tokens:
                 logger.error("Refresh failed: no access_token in response")
                 return False
@@ -258,18 +284,22 @@ class AuthManager:
         """Exchange authorization code for access tokens (adds PKCE verifier if present)."""
         provider_config = self.config.get_auth_config(provider) or {}
         redirect = provider_config.get('redirect_uri') or self.config.get('env.dev.redirect_uri') or ''
+        # Build token request body. If provider uses HTTP Basic for client auth,
+        # do NOT include client_id/client_secret in the form body.
+        use_basic = str(provider_config.get('client_auth_method', '')).lower() == 'basic'
         data = {
             'grant_type': 'authorization_code',
             'code': code,
-            'client_id': provider_config.get('client_id', ''),
-            'client_secret': provider_config.get('client_secret', ''),
             'redirect_uri': redirect
         }
+        if not use_basic:
+            data['client_id'] = provider_config.get('client_id', '')
+            data['client_secret'] = provider_config.get('client_secret', '')
         stored = self._load_pkce_state().get(provider)
         if stored and stored.get('code_verifier'):
             data['code_verifier'] = stored['code_verifier']
         token_url = provider_config.get('token_url') or 'https://example.com/token'
-        return await self._request_token(token_url, data, provider)
+        return await self._call_request_token(token_url, data, provider)
 
     async def _request_token(self, token_url: str, data: Dict[str, Any], provider: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Internal helper to POST to token endpoint (facilitates monkeypatching in tests).
@@ -300,6 +330,29 @@ class AuthManager:
         except Exception as e:
             logger.error(f"Token request exception: {e}")
         return None
+
+    async def _call_request_token(self, token_url: str, data: Dict[str, Any], provider: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Compatibility shim to invoke _request_token regardless of monkeypatch signature.
+
+        Some tests replace _request_token with a 2-argument coroutine (token_url, data).
+        In production we pass (token_url, data, provider). Detect the bound callable arity
+        and call accordingly.
+        """
+        import inspect
+        func = self._request_token
+        try:
+            params = inspect.signature(func).parameters
+            # Bound methods/functions do not include 'self' here
+            if len(params) <= 2:
+                return await func(token_url, data)  # type: ignore[misc]
+            return await func(token_url, data, provider)
+        except TypeError:
+            # Fallback try without provider
+            try:
+                return await func(token_url, data)  # type: ignore[misc]
+            except Exception as e:
+                logger.error(f"Token request invocation failed: {e}")
+                return None
 
     async def _attempt_local_callback(self, provider: str) -> bool:
         """Attempt to start a transient local HTTP server to capture the authorization code.
@@ -394,9 +447,24 @@ class AuthManager:
         if not expires_at:
             return False
         
-        # Check if token expires within next 5 minutes
-        expiry_time = datetime.fromisoformat(expires_at)
-        return expiry_time > datetime.now() + timedelta(minutes=5)
+        # Normalize expiry parsing; support trailing 'Z' and ensure tz-aware comparison.
+        exp_raw = str(expires_at)
+        try:
+            if exp_raw.endswith('Z'):
+                # Convert Z to +00:00 for fromisoformat compatibility across versions
+                exp_raw_norm = exp_raw[:-1] + '+00:00'
+            else:
+                exp_raw_norm = exp_raw
+            expiry_time = datetime.fromisoformat(exp_raw_norm)
+        except Exception:
+            # Fallback: treat as invalid if unparsable
+            return False
+        # If expiry is naive, compare with naive now; if aware, compare in the same tz
+        if expiry_time.tzinfo is None:
+            now_dt = datetime.now()
+        else:
+            now_dt = datetime.utcnow().astimezone(expiry_time.tzinfo)
+        return expiry_time > now_dt + timedelta(minutes=5)
     
     def _calculate_expiry(self, expires_in: int) -> str:
         """Calculate token expiry time"""

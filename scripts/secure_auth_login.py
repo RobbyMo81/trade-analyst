@@ -19,7 +19,7 @@ from app.auth import AuthManager
 import webbrowser
 
 
-async def main_async(env: str, no_browser: bool) -> int:
+async def main_async(env: str, no_browser: bool, timeout: int) -> int:
     cfg = Config()
     auth = AuthManager(cfg, env=env)
     # Build URL (stores PKCE verifier internally)
@@ -30,11 +30,22 @@ async def main_async(env: str, no_browser: bool) -> int:
         except Exception:
             pass
     print("Auth URL:", url)
+    # Persist the URL so external tools or the assistant can present it while this process waits
+    cache_dir = Path('.cache') / env
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    (cache_dir / 'auth_url.txt').write_text(url, encoding='utf-8')
 
     # Wait for callback artifact (written by callback server)
-    cache_dir = Path('.cache') / env
     artifact = cache_dir / 'last_callback.json'
-    for _ in range(360):  # up to ~3 minutes
+    # Clear any stale artifact from prior attempts
+    try:
+        if artifact.exists():
+            artifact.unlink()
+    except Exception:
+        pass
+    # Poll every 0.5s up to the timeout window
+    polls = max(1, int(timeout / 0.5))
+    for _ in range(polls):
         if artifact.exists():
             try:
                 data = json.loads(artifact.read_text(encoding='utf-8'))
@@ -62,8 +73,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument('--env', default='dev')
     ap.add_argument('--no-browser', action='store_true')
+    ap.add_argument('--timeout', type=int, default=180, help='Seconds to wait for callback artifact')
     a = ap.parse_args()
-    return asyncio.run(main_async(a.env, a.no_browser))
+    return asyncio.run(main_async(a.env, a.no_browser, a.timeout))
 
 
 if __name__ == '__main__':

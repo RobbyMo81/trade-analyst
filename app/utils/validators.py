@@ -505,9 +505,9 @@ import urllib.parse as _urllib_parse
 def is_valid_redirect_format(uri: str) -> bool:
     """Basic structural validation for redirect URIs.
 
-    Rules:
-    - https is always accepted when netloc and path exist
-    - http is accepted ONLY for localhost/127.0.0.1 to support local dev flows
+    Rules (hardened):
+    - https is accepted when netloc and path exist
+    - http is NOT accepted (tests enforce https-only hygiene)
     """
     try:
         p = _urllib_parse.urlparse(uri)
@@ -515,9 +515,6 @@ def is_valid_redirect_format(uri: str) -> bool:
             return False
         if p.scheme == "https":
             return True
-        if p.scheme == "http":
-            host = p.hostname or ""
-            return host in {"localhost", "127.0.0.1"}
         return False
     except Exception:
         return False

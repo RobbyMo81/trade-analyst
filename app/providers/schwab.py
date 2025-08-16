@@ -149,18 +149,37 @@ class SchwabClient:
                     await asyncio.sleep(wait)
             # Fallback per-symbol
             for sym in symbols:
-                per_url = self._join(f"/quotes/{sym.upper()}")
+                # Use batch endpoint with single-symbol param instead of unsupported /quotes/{symbol}
                 attempt_s = 0
                 while attempt_s < max_attempts:
                     try:
-                        async with session.get(per_url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                        params_single = {'symbols': sym.upper()}
+                        async with session.get(batch_url, headers=headers, params=params_single, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                             if resp.status == 200:
                                 payload = await resp.json()
-                                out_records.append(self._coerce_quote_dict(payload | {'symbol': sym.upper()}, ts))
+                                # Normalize payload to a list of quote dicts
+                                quotes = payload.get('quotes') or payload.get('data') or []
+                                if isinstance(quotes, dict):
+                                    quotes = [v | {'symbol': k} for k, v in quotes.items()]
+                                # If still empty, try top-level symbol-keyed responses
+                                if not quotes and isinstance(payload, dict):
+                                    for k, v in payload.items():
+                                        # only accept dict-valued entries that look like quotes
+                                        if not isinstance(v, dict):
+                                            continue
+                                        # accept if key matches requested symbol or value contains numeric price fields
+                                        if k.upper() == sym.upper() or any(field in v for field in ('bid', 'bidPrice', 'lastPrice', 'ask', 'askPrice')):
+                                            quotes.append(v | {'symbol': k})
+                                for q in quotes:
+                                    out_records.append(self._coerce_quote_dict(q, ts))
+                                if out_records:
+                                    break
+                                # no records, treat as non-200-ish for fallback logic
+                                logger.warning(f"Quote {sym} status {resp.status} (no quotes found)")
                                 break
                             else:
                                 logger.warning(f"Quote {sym} status {resp.status}")
-                                break  # non-200 no retry for status errors except maybe 5xx
+                                break
                     except Exception as se:
                         logger.warning(f"Quote {sym} attempt {attempt_s+1} error: {se}")
                         attempt_s += 1
@@ -172,11 +191,27 @@ class SchwabClient:
         """Map provider payload keys to internal schema keys; fill timestamp if absent."""
         try:
             symbol = (payload.get('symbol') or '').upper()
-            bid = payload.get('bid') or payload.get('bidPrice') or payload.get('bestBid')
-            ask = payload.get('ask') or payload.get('askPrice') or payload.get('bestAsk')
-            bid_sz = payload.get('bid_size') or payload.get('bidSize') or payload.get('bid_size_lot')
-            ask_sz = payload.get('ask_size') or payload.get('askSize') or payload.get('ask_size_lot')
-            timestamp = payload.get('timestamp') or payload.get('time') or ts
+            # Try several common locations for bid/ask across provider responses
+            bid = (payload.get('bid') or payload.get('bidPrice') or payload.get('bestBid'))
+            ask = (payload.get('ask') or payload.get('askPrice') or payload.get('bestAsk'))
+            # Nested shapes (Schwab often uses 'extended' or 'quote' sections)
+            if not bid:
+                ext = payload.get('extended') or {}
+                q = payload.get('quote') or {}
+                bid = ext.get('bidPrice') or ext.get('bid') or q.get('bidPrice') or q.get('lastPrice')
+            if not ask:
+                ext = payload.get('extended') or {}
+                q = payload.get('quote') or {}
+                ask = ext.get('askPrice') or ext.get('ask') or q.get('askPrice') or q.get('lastPrice')
+
+            # Sizes
+            bid_sz = (payload.get('bid_size') or payload.get('bidSize') or
+                      (payload.get('extended') or {}).get('bidSize') or (payload.get('quote') or {}).get('bidSize'))
+            ask_sz = (payload.get('ask_size') or payload.get('askSize') or
+                      (payload.get('extended') or {}).get('askSize') or (payload.get('quote') or {}).get('askSize'))
+
+            # Timestamp: provider may use epoch ms, 'time', or nested fields
+            timestamp = payload.get('timestamp') or payload.get('time') or payload.get('quoteTime') or payload.get('tradeTime') or ts
             return {
                 'symbol': symbol,
                 'bid': bid,

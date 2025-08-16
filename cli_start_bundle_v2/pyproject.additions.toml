@@ -1,0 +1,4 @@
+
+# Merge this block into your existing pyproject.toml under [project]
+[project.scripts]
+trade-analyst = "cli_start_bundle_v2.start:app"

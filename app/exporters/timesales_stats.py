@@ -31,7 +31,11 @@ def build_timesales_metrics(cfg: Dict[str, Any], trades: pd.DataFrame | None = N
     Provide real trades & quotes DataFrames when available; synthetic placeholders are used otherwise.
     """
     nbbo_window_ms = cfg.get("timesales", {}).get("nbbo_window_ms", 1000)
-    price_epsilon = cfg.get("timesales", {}).get("price_epsilon", 1e-6)
+    pe = cfg.get("timesales", {}).get("price_epsilon", 1e-6)
+    try:
+        price_epsilon = float(pe)
+    except Exception:
+        price_epsilon = 1e-6
     if trades is None:
         trades = _synthetic_trades()
     if quotes is None:

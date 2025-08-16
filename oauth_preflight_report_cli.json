@@ -1,0 +1,16 @@
+{
+  "env": "dev",
+  "redirect_uri": "https://127.0.0.1:8443/auth/redirect",
+  "redirect_https": true,
+  "redirect_in_allowlist": true,
+  "authorize_url_present": true,
+  "token_url_present": true,
+  "client_id_present": true,
+  "client_secret_present": true,
+  "fernet_key_valid": true,
+  "token_cache": ".cache\\dev\\token_cache.json",
+  "actions": [
+    "deleted .cache\\dev\\pkce_state.json"
+  ],
+  "passed": true
+}

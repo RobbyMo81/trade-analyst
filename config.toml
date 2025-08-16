@@ -34,6 +34,9 @@ port = 8443
 # Can be overridden via environment variable SCHWAB_MARKETDATA_BASE
 marketdata_base = "https://api.schwabapi.com/v1/marketdata"
 
+# Tip: to override per-session without editing this file (PowerShell):
+#   $env:SCHWAB_MARKETDATA_BASE = "https://api.schwabapi.com/v1/marketdata"
+
 [runtime]
 storage_root = "./market_data"
 token_expiry_warning_minutes = 10

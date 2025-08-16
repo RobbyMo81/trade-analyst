@@ -26,7 +26,19 @@ def ensure_self_signed_cert(host: str, cert_dir: Path) -> tuple[Path, Path]:
     cert_dir.mkdir(parents=True, exist_ok=True)
     key_path = cert_dir / "server.key"
     crt_path = cert_dir / "server.crt"
+    # Prefer existing server certs in the cert_dir
     if key_path.exists() and crt_path.exists():
+        return crt_path, key_path
+    # If mkcert default files exist in project root, adopt them
+    root = Path.cwd()
+    mkcert_crt = root / "127.0.0.1+1.pem"
+    mkcert_key = root / "127.0.0.1+1-key.pem"
+    if mkcert_crt.exists() and mkcert_key.exists():
+        # Copy to expected filenames
+        crt_bytes = mkcert_crt.read_bytes()
+        key_bytes = mkcert_key.read_bytes()
+        crt_path.write_bytes(crt_bytes)
+        key_path.write_bytes(key_bytes)
         return crt_path, key_path
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)

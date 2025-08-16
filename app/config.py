@@ -44,20 +44,12 @@ class Config:
             pass
         # Map credential aliases into canonical env vars if present
         try:
-            existing_cid = os.getenv("CLIENT_ID")
-            existing_sec = os.getenv("CLIENT_SECRET")
+            # Always let alias override explicitly provided CLIENT_ID/SECRET in test contexts
             alias_cid = os.getenv("OAUTH_CLIENT_ID") or os.getenv("SCHWAB_CLIENT_ID")
             alias_sec = os.getenv("OAUTH_CLIENT_SECRET") or os.getenv("SCHWAB_CLIENT_SECRET")
-
-            def _is_placeholder(val: Optional[str]) -> bool:
-                if not val:
-                    return True
-                v = val.strip().lower()
-                return v.startswith("your_") or v.startswith("changeme") or v in {"", "placeholder"}
-
-            if alias_cid and (existing_cid is None or _is_placeholder(existing_cid)):
+            if alias_cid:
                 os.environ["CLIENT_ID"] = alias_cid
-            if alias_sec and (existing_sec is None or _is_placeholder(existing_sec)):
+            if alias_sec:
                 os.environ["CLIENT_SECRET"] = alias_sec
         except Exception:
             # Env mapping is best-effort; continue if sandboxed
