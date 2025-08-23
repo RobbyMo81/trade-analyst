@@ -58,16 +58,25 @@ def _nearest_quarterly_contract(root: str, lookahead_months: int = 18) -> str:
 
 
 def translate_root_to_front_month(symbol: str) -> str:
-    """Translate root futures (e.g., 'ES', 'NQ') to a front-month contract code using nearest quarterly expiry.
+    """Translate root futures (e.g., 'ES', 'NQ', '/NQ', '/ES') to a front-month contract code using nearest quarterly expiry.
 
     If symbol isn't a recognized root, return it unchanged.
+    Handles symbols with or without leading forward slash (common in trading platforms).
     """
-    if not symbol or not symbol.isalpha():
+    if not symbol:
         return symbol
-    root = symbol.upper()
+    
+    # Strip leading forward slash if present (common in trading platforms)
+    clean_symbol = symbol.lstrip('/')
+    
+    if not clean_symbol or not clean_symbol.isalpha():
+        return symbol
+    
+    root = clean_symbol.upper()
     # Currently support common E-mini roots; extend as needed
     if root not in ("ES", "NQ"):
-        return root
+        return symbol  # Return original if not recognized
+    
     try:
         return _nearest_quarterly_contract(root)
     except Exception:

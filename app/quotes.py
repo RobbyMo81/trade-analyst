@@ -6,6 +6,7 @@ from datetime import datetime
 import asyncio
 from .config import Config
 from .auth import AuthManager
+from .utils.stub_detection import check_stub_execution, log_stub_warning
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +38,21 @@ class QuotesInterface:
                 logger.error("No valid authentication token available")
                 return None
             
-            # TODO: Implement actual API call
-            # This is a stub implementation
+            # PRODUCTION SAFETY: Fail hard on stub execution
+            check_stub_execution(
+                stub_name="QuotesInterface.get_quote",
+                context={
+                    "symbol": symbol,
+                    "method": "get_quote", 
+                    "error": "No real quotes API implementation - only stub code exists"
+                }
+            )
+            
+            # THIS IS STUB CODE - SHOULD NEVER EXECUTE IN PRODUCTION
+            log_stub_warning(
+                "QuotesInterface.get_quote",
+                "Implement real Schwab quotes API integration"
+            )
             quote_data = {
                 'symbol': symbol,
                 'price': 150.25,

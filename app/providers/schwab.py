@@ -5,8 +5,8 @@ Uses AuthManager for token retrieval. Methods return structured dicts to
 facilitate downstream normalization and testing.
 """
 from __future__ import annotations
-from typing import Any, Dict, Optional, List
-from datetime import datetime  # retained only if needed elsewhere; timestamp creation now via timeutils helpers
+from typing import Any, Dict, Optional, List, Union
+from datetime import datetime, date
 import aiohttp
 import logging
 import asyncio
@@ -223,3 +223,177 @@ class SchwabClient:
         except Exception as e:
             logger.error(f"Failed to coerce quote payload: {e}")
             return {}
+
+    async def get_price_history(self, symbol: str, period_type: str = "day", period: int = 1, 
+                               frequency_type: str = "daily", frequency: int = 1, 
+                               start_date: Optional[Union[int, date]] = None, end_date: Optional[Union[int, date]] = None,
+                               need_extended_hours_data: bool = False) -> Dict[str, Any]:
+        """
+        Retrieve historical price data from Schwab API.
+        
+        Args:
+            symbol: Stock symbol (e.g., 'SPY')
+            period_type: 'day', 'month', 'year', 'ytd'
+            period: Number of periods (1, 2, 3, etc.)
+            frequency_type: 'minute', 'daily', 'weekly', 'monthly'
+            frequency: Frequency value (1, 5, 10, 15, 30 for minute data)
+            start_date: Start date as epoch milliseconds
+            end_date: End date as epoch milliseconds
+            
+        Returns:
+            Dict containing candles and metadata
+        """
+        try:
+            params = {
+                'periodType': period_type,
+                'period': period,
+                'frequencyType': frequency_type,
+                'frequency': frequency
+            }
+            
+            # Convert date objects to epoch milliseconds if provided
+            if start_date:
+                if isinstance(start_date, date):
+                    # Convert date to epoch milliseconds (start of day)
+                    start_datetime = datetime.combine(start_date, datetime.min.time())
+                    params['startDate'] = int(start_datetime.timestamp() * 1000)
+                else:
+                    params['startDate'] = start_date
+                    
+            if end_date:
+                if isinstance(end_date, date):
+                    # Convert date to epoch milliseconds (end of day)
+                    end_datetime = datetime.combine(end_date, datetime.max.time())
+                    params['endDate'] = int(end_datetime.timestamp() * 1000)
+                else:
+                    params['endDate'] = end_date
+                    
+            if need_extended_hours_data:
+                params['needExtendedHoursData'] = need_extended_hours_data
+                
+            url = self._join("/pricehistory")
+            params['symbol'] = symbol.upper()
+            
+            headers = await self._headers()
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers=headers,
+                    params=params,
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    if response.status != 200:
+                        response_text = await response.text()
+                        logger.error(f"Historical API error {response.status}: {response_text}")
+                        logger.error(f"Request URL: {response.url}")
+                        logger.error(f"Request headers: {headers}")
+                        logger.error(f"Request params: {params}")
+                    
+                    response.raise_for_status()
+                    data = await response.json()
+                    
+                    logger.debug(f"Historical data retrieved for {symbol}: {len(data.get('candles', []))} candles")
+                    return data
+                
+        except Exception as e:
+            logger.error(f"Error getting price history for {symbol}: {e}")
+            return {"candles": [], "symbol": symbol, "empty": True}
+
+    async def get_daily_bars(self, symbol: str, days_back: int = 30) -> List[Dict[str, Any]]:
+        """
+        Get daily OHLCV bars for a symbol.
+        
+        Args:
+            symbol: Stock symbol
+            days_back: Number of days of history to retrieve
+            
+        Returns:
+            List of daily bar dictionaries
+        """
+        try:
+            data = await self.get_price_history(
+                symbol=symbol,
+                period_type="day",
+                period=days_back,
+                frequency_type="daily",
+                frequency=1
+            )
+            
+            candles = data.get('candles', [])
+            bars = []
+            
+            for candle in candles:
+                bars.append({
+                    'symbol': symbol.upper(),
+                    'date': candle.get('datetime'),
+                    'open': candle.get('open'),
+                    'high': candle.get('high'),
+                    'low': candle.get('low'),
+                    'close': candle.get('close'),
+                    'volume': candle.get('volume', 0)
+                })
+                
+            logger.debug(f"Retrieved {len(bars)} daily bars for {symbol}")
+            return bars
+            
+        except Exception as e:
+            logger.error(f"Error getting daily bars for {symbol}: {e}")
+            return []
+
+
+
+    async def get_intraday_bars(self, symbol: str, target_date: date, session: str = "rth") -> List[Dict[str, Any]]:
+        """
+        Get intraday minute bars for a specific trading day.
+        
+        Args:
+            symbol: Stock symbol
+            target_date: Trading date to get bars for
+            session: Trading session ('rth' for regular trading hours)
+            
+        Returns:
+            List of intraday bar dictionaries
+        """
+        try:
+            # Get 1-minute bars for the target date
+            data = await self.get_price_history(
+                symbol=symbol,
+                period_type="day",
+                period=1,
+                frequency_type="minute",
+                frequency=1,
+                start_date=target_date,
+                end_date=target_date
+            )
+            
+            candles = data.get('candles', [])
+            bars = []
+            
+            for candle in candles:
+                # Convert timestamp to datetime
+                dt = datetime.fromtimestamp(candle.get('datetime', 0) / 1000)
+                
+                # Filter for regular trading hours if requested
+                if session == "rth":
+                    # Regular trading hours: 9:30 AM - 4:00 PM ET
+                    if dt.hour < 9 or (dt.hour == 9 and dt.minute < 30) or dt.hour >= 16:
+                        continue
+                
+                bars.append({
+                    'symbol': symbol.upper(),
+                    'datetime': dt,
+                    'timestamp': candle.get('datetime'),
+                    'open': candle.get('open'),
+                    'high': candle.get('high'),
+                    'low': candle.get('low'),
+                    'close': candle.get('close'),
+                    'volume': candle.get('volume', 0)
+                })
+                
+            logger.debug(f"Retrieved {len(bars)} intraday bars for {symbol} on {target_date}")
+            return bars
+            
+        except Exception as e:
+            logger.error(f"Error getting intraday bars for {symbol} on {target_date}: {e}")
+            return []

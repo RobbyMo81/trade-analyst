@@ -7,6 +7,7 @@ import asyncio
 import pandas as pd
 from .config import Config
 from .auth import AuthManager
+from .guardrails import assert_no_stub  # Production safety
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +40,13 @@ class HistoricalInterface:
         try:
             logger.info(f"Fetching OHLC data for {symbol} from {start_date} to {end_date}, interval: {interval}")
             
-            # Get authentication token
-            token = await self.auth_manager.get_access_token('historical_provider')
+            # Check if we're in simulate mode
+            if self.config.get('auth.simulate', True):
+                logger.info(f"Running in simulate mode - returning synthetic OHLC for {symbol}")
+                return self._generate_synthetic_ohlc(symbol, start_date, end_date, interval)
+            
+            # Get authentication token - use same provider as quotes system
+            token = await self.auth_manager.get_access_token('default')
             if not token:
                 logger.error("No valid authentication token available")
                 return None
@@ -50,8 +56,12 @@ class HistoricalInterface:
                 logger.error("Start date must be before end date")
                 return None
             
-            # TODO: Implement actual API call
-            # This is a stub implementation
+            # PRODUCTION SAFETY: Block stub execution when FAIL_ON_STUB=1 (default)
+            assert_no_stub()
+            logger.error("[HISTORICAL-STUB] No real historical API implementation - BLOCKED in production")
+            
+            # THIS IS STUB CODE - LOCKED AND WILL NEVER EXECUTE IN PRODUCTION
+            logger.warning("[HISTORICAL-STUB] Implement real Schwab historical API integration")
             ohlc_data = []
             current_date = start_date
             
